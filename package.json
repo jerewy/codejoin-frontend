@@ -3,11 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "node server.js",
+    "dev": "next dev",
     "dev:next": "next dev",
     "build": "next build",
     "start": "next start",
-    "start:server": "NODE_ENV=production node server.js",
+    "start:server": "NODE_ENV=production next start",
     "lint": "next lint",
     "migrate-ai-service": "tsx scripts/migrate-ai-conversation-service.ts",
     "migrate-ai-service:dry": "tsx scripts/migrate-ai-conversation-service.ts --dry-run",
