@@ -11,10 +11,10 @@ export const LoginGoogle = () => {
     // Get the current origin for dynamic redirect
     const redirectTo =
       typeof window !== "undefined"
-        ? `${window.location.origin}/dashboard`
+        ? `${window.location.origin}/auth/callback`
         : process.env.NEXT_PUBLIC_SITE_URL
-        ? `${process.env.NEXT_PUBLIC_SITE_URL}/dashboard`
-        : "http://localhost:3000/dashboard";
+        ? `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`
+        : "http://localhost:3000/auth/callback";
 
     await supabase.auth.signInWithOAuth({
       provider: "google",
