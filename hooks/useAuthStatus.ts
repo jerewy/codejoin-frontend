@@ -37,6 +37,12 @@ export function useAuthStatus() {
         // Set up auth state listener
         const { data: listener } = client.auth.onAuthStateChange((_event, session) => {
           if (isSubscribed) {
+            console.log("Auth state changed in useAuthStatus:", {
+              event: _event,
+              hasSession: !!session,
+              userId: session?.user?.id,
+              email: session?.user?.email
+            });
             setIsLoggedIn(!!session);
           }
         });

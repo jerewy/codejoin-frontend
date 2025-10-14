@@ -134,6 +134,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   // For protected routes where auth is configured but user is not logged in,
   // show access denied (don't redirect to avoid loops)
   if (isProtectedRoute && !isLoggedIn) {
+    console.log("AppLayout: Protected route, user not logged in", {
+      segment,
+      isLoggedIn,
+      isAuthConfigured,
+      isProtectedRoute
+    });
     return (
       <div className="flex items-center justify-center min-h-screen bg-muted">
         <div className="text-center">
@@ -151,6 +157,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   // If the route has a sidebar, render the full dashboard layout
   if (hasSidebar) {
+    console.log("AppLayout: Rendering dashboard with sidebar", {
+      segment,
+      isLoggedIn,
+      isAuthConfigured,
+      hasSidebar
+    });
     return (
       <SidebarProvider
         open={isSidebarOpen}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 
@@ -9,6 +9,7 @@ export default function AuthCallbackPage() {
   const searchParams = useSearchParams();
   const supabase = getSupabaseClient();
   const [isProcessing, setIsProcessing] = useState(false);
+  const processedCodeRef = useRef<string | null>(null);
 
   // Helper function to get the correct redirect URL
   const getRedirectURL = () => {
@@ -29,35 +30,48 @@ export default function AuthCallbackPage() {
   };
 
   useEffect(() => {
-    // Prevent multiple simultaneous callbacks
-    if (isProcessing) return;
+    let isMounted = true;
 
     const handleAuthCallback = async () => {
-      if (!supabase) {
-        router.push("/");
+      if (!supabase || !isMounted) {
+        if (isMounted) router.push("/");
         return;
       }
 
-      setIsProcessing(true);
+      // Prevent multiple simultaneous callbacks
+      if (isProcessing) {
+        console.log("Already processing auth callback, skipping...");
+        return;
+      }
 
-      try {
-        // Check if there's a code parameter (OAuth callback)
-        const code = searchParams.get("code");
-        const error = searchParams.get("error");
-        const errorDescription = searchParams.get("error_description");
+      // Check if there's a code parameter (OAuth callback)
+      const code = searchParams.get("code");
+      const error = searchParams.get("error");
+      const errorDescription = searchParams.get("error_description");
 
-        // Handle OAuth errors
-        if (error) {
-          console.error("OAuth error:", error, errorDescription);
-          router.push(`/login?error=${encodeURIComponent(errorDescription || error)}`);
-          return;
-        }
+      // Handle OAuth errors
+      if (error) {
+        console.error("OAuth error:", error, errorDescription);
+        router.push(`/login?error=${encodeURIComponent(errorDescription || error)}`);
+        return;
+      }
 
-        if (code) {
-          console.log("Processing OAuth callback with code...");
+      // Prevent processing the same code multiple times
+      if (code && processedCodeRef.current === code) {
+        console.log("Code already processed, skipping...");
+        return;
+      }
 
+      if (code) {
+        console.log("Processing OAuth callback with code...");
+        processedCodeRef.current = code;
+        setIsProcessing(true);
+
+        try {
           // Exchange the code for a session
           const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+
+          if (!isMounted) return;
 
           if (exchangeError) {
             console.error("Error exchanging code for session:", exchangeError);
@@ -74,41 +88,67 @@ export default function AuthCallbackPage() {
           }
 
           if (data.session) {
-            console.log("OAuth session established successfully");
-            // Add a small delay to ensure auth state is properly set across the app
-            setTimeout(() => {
-              router.push("/dashboard");
-            }, 100);
+            console.log("OAuth session established successfully", {
+              userId: data.session.user?.id,
+              email: data.session.user?.email
+            });
+
+            // Store session info for debugging
+            console.log("Session user:", data.session.user);
+            console.log("Session expires at:", data.session.expires_at);
+
+            // Use Next.js router instead of window.location.href to prevent full page reload
+            console.log("Redirecting to dashboard...");
+            router.push("/dashboard");
             return;
           }
-        } else {
-          // No code parameter, just check existing session
-          console.log("No OAuth code, checking existing session...");
+        } catch (err) {
+          if (!isMounted) return;
+          console.error("Unexpected error in auth callback:", err);
+          router.push("/login?error=An unexpected error occurred. Please try again.");
+        } finally {
+          if (isMounted) {
+            setIsProcessing(false);
+          }
+        }
+      } else {
+        // No code parameter, just check existing session
+        console.log("No OAuth code, checking existing session...");
+
+        try {
           const { data } = await supabase.auth.getSession();
 
+          if (!isMounted) return;
+
           if (data.session) {
-            console.log("Existing session found, redirecting to dashboard");
-            setTimeout(() => {
-              router.push("/dashboard");
-            }, 100);
+            console.log("Existing session found, redirecting to dashboard", {
+              userId: data.session.user?.id,
+              email: data.session.user?.email
+            });
+
+            // Use Next.js router instead of window.location.href
+            console.log("Redirecting to dashboard from existing session...");
+            router.push("/dashboard");
             return;
           }
+        } catch (err) {
+          if (!isMounted) return;
+          console.error("Error checking existing session:", err);
         }
 
         // If we get here, authentication failed
         console.log("Authentication failed - no session found");
         router.push("/login?error=Authentication failed. Please try again.");
-
-      } catch (err) {
-        console.error("Unexpected error in auth callback:", err);
-        router.push("/login?error=An unexpected error occurred. Please try again.");
-      } finally {
-        setIsProcessing(false);
       }
     };
 
     handleAuthCallback();
-  }, [router, supabase, searchParams, isProcessing]);
+
+    // Cleanup function
+    return () => {
+      isMounted = false;
+    };
+  }, [router, supabase, searchParams]); // Remove isProcessing from dependencies
 
   return (
     <div className="min-h-screen flex justify-center items-center">
