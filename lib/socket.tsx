@@ -9,6 +9,7 @@ import {
   ReactNode,
 } from "react";
 import { io, Socket } from "socket.io-client";
+import { API_CONFIG, isProduction } from "./api-config";
 
 interface SocketContextType {
   socket: Socket | null;
@@ -136,13 +137,14 @@ export const SocketProvider = ({ children }: SocketProviderProps) => {
     let socketInstance: Socket | null = null;
 
     const resolveSocketUrl = () => {
-      const explicitUrl = process.env.NEXT_PUBLIC_SOCKET_URL?.trim();
-      if (explicitUrl) {
+      // Use the API_CONFIG helper for consistent URL resolution
+      const explicitUrl = API_CONFIG.SOCKET_URL?.trim();
+      if (explicitUrl && explicitUrl !== "http://localhost:3002") {
         return explicitUrl;
       }
 
-      if (process.env.NODE_ENV === "production") {
-        return process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
+      if (isProduction()) {
+        return API_CONFIG.SITE_URL || window.location.origin;
       }
 
       return window.location.origin;
@@ -435,10 +437,10 @@ export const useFileCollaboration = (
       }
     };
 
-    socket.on('file-updated', handleFileUpdate);
+    socket.on("file-updated", handleFileUpdate);
 
     return () => {
-      socket.off('file-updated', handleFileUpdate);
+      socket.off("file-updated", handleFileUpdate);
     };
   }, [socket, fileId, userId]);
 
@@ -507,14 +509,14 @@ export const useFileCollaboration = (
       });
     };
 
-    socket.on('cursor-update', handleCursorUpdate);
-    socket.on('user-file-select', handleUserFileSelect);
-    socket.on('collaborator-left', handleCollaboratorLeft);
+    socket.on("cursor-update", handleCursorUpdate);
+    socket.on("user-file-select", handleUserFileSelect);
+    socket.on("collaborator-left", handleCollaboratorLeft);
 
     return () => {
-      socket.off('cursor-update', handleCursorUpdate);
-      socket.off('user-file-select', handleUserFileSelect);
-      socket.off('collaborator-left', handleCollaboratorLeft);
+      socket.off("cursor-update", handleCursorUpdate);
+      socket.off("user-file-select", handleUserFileSelect);
+      socket.off("collaborator-left", handleCollaboratorLeft);
     };
   }, [socket, projectId, fileId, userId]);
 
@@ -523,7 +525,7 @@ export const useFileCollaboration = (
   }, [fileId]);
 
   const handleContentChange = useCallback(
-    (content: string, operation = 'edit') => {
+    (content: string, operation = "edit") => {
       emitFileChange({
         projectId,
         fileId,
@@ -568,4 +570,3 @@ export const useFileCollaboration = (
     remoteCursors,
   };
 };
-

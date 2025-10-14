@@ -15,6 +15,7 @@
     "fix-db-permissions": "supabase db push --file fix-ai-conversation-permissions.sql",
     "deploy": "C:\\Windows\\System32\\bash.exe scripts/deploy.sh",
     "deploy:frontend": "vercel --prod",
+    "deploy:vercel": "scripts\\deploy-vercel.bat",
     "deploy:backend": "cd code-execution-backend && npm run deploy",
     "deploy:socket": "cd socket-server && npm run deploy",
     "separate": "scripts\\separate-repositories.bat",

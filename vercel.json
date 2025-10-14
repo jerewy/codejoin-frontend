@@ -4,7 +4,19 @@
     "NEXT_PUBLIC_SUPABASE_URL": "@supabase-url",
     "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@supabase-anon-key",
     "NEXT_PUBLIC_API_URL": "@backend-url",
-    "NEXT_PUBLIC_SOCKET_URL": "@socket-url"
+    "NEXT_PUBLIC_SOCKET_URL": "@socket-url",
+    "NEXT_PUBLIC_SITE_URL": "@site-url",
+    "NODE_ENV": "production"
+  },
+  "build": {
+    "env": {
+      "NEXT_PUBLIC_SUPABASE_URL": "@supabase-url",
+      "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@supabase-anon-key",
+      "NEXT_PUBLIC_API_URL": "@backend-url",
+      "NEXT_PUBLIC_SOCKET_URL": "@socket-url",
+      "NEXT_PUBLIC_SITE_URL": "@site-url",
+      "NODE_ENV": "production"
+    }
   },
   "functions": {
     "app/api/**/*.ts": {
@@ -15,6 +27,29 @@
     {
       "source": "/api/socket.io",
       "destination": "@socket-url"
+    },
+    {
+      "source": "/socket.io",
+      "destination": "@socket-url"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET, POST, PUT, DELETE, OPTIONS"
+        },
+        {
+          "key": "Access-Control-Allow-Headers",
+          "value": "Content-Type, Authorization"
+        }
+      ]
     }
   ]
 }

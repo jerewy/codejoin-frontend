@@ -8,16 +8,24 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Send, Brain, Loader2, ArrowDown, Settings, Zap, AlertTriangle } from "lucide-react";
+import {
+  Send,
+  Brain,
+  Loader2,
+  ArrowDown,
+  Settings,
+  Zap,
+  AlertTriangle,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import EnhancedAIMessage from "./enhanced-ai-message";
-import AIModelSelector, { AIModelHealthSummary } from "./ai-model-selector";
+import AIModelSelector from "./ai-model-selector";
 import AIModelStatusIndicator from "./ai-model-status-indicator";
 import {
   DEFAULT_MODELS,
   DEFAULT_MODEL_SETTINGS,
   type AIModelConfig,
-  type AIModelSettings
+  type AIModelSettings,
 } from "@/types/ai-model";
 import { aiModelSettingsService } from "@/lib/ai-model-settings-service";
 import { aiModelStatusService } from "@/lib/ai-model-status-service";
@@ -45,26 +53,36 @@ export default function EnhancedAIChatWithModelSelector({
   onStatusChange,
   showModelSelector = true,
   showHealthSummary = false,
-  className
+  className,
 }: EnhancedAIChatWithModelSelectorProps) {
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [message, setMessage] = useState("");
-  const [messages, setMessages] = useState<Array<{
-    id: string;
-    role: 'user' | 'assistant';
-    content: string;
-    timestamp: string;
-    modelUsed?: string;
-    responseTime?: number;
-    isTyping?: boolean;
-  }>>([]);
+  const [messages, setMessages] = useState<
+    Array<{
+      id: string;
+      role: "user" | "assistant";
+      content: string;
+      timestamp: string;
+      modelUsed?: string;
+      responseTime?: number;
+      isTyping?: boolean;
+      conversation_id: string;
+      author_id: string;
+      metadata: any;
+      created_at: string;
+    }>
+  >([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
-  const [currentModel, setCurrentModel] = useState(initialModel || DEFAULT_MODEL_SETTINGS.preferredModel);
-  const [settings, setSettings] = useState<AIModelSettings>(DEFAULT_MODEL_SETTINGS);
+  const [currentModel, setCurrentModel] = useState(
+    initialModel || DEFAULT_MODEL_SETTINGS.preferredModel
+  );
+  const [settings, setSettings] = useState<AIModelSettings>(
+    DEFAULT_MODEL_SETTINGS
+  );
   const [modelStatuses, setModelStatuses] = useState<Record<string, any>>({});
   const [showModelSettings, setShowModelSettings] = useState(false);
   const [autoFallbackTriggered, setAutoFallbackTriggered] = useState(false);
@@ -79,28 +97,33 @@ export default function EnhancedAIChatWithModelSelector({
     aiModelStatusService.startHealthChecks(DEFAULT_MODELS, 30000);
 
     // Listen for status updates
-    const unsubscribeStatus = aiModelStatusService.addStatusListener((statuses) => {
-      setModelStatuses(statuses);
+    const unsubscribeStatus = aiModelStatusService.addStatusListener(
+      (statuses) => {
+        setModelStatuses(statuses);
 
-      // Auto-switch if current model goes offline and auto-switch is enabled
-      const currentModelStatus = statuses[currentModel];
-      if (
-        initialSettings.autoSwitchOnError &&
-        currentModelStatus &&
-        (currentModelStatus.status === 'offline' || currentModelStatus.status === 'error') &&
-        initialSettings.fallbackEnabled &&
-        initialSettings.fallbackModel &&
-        initialSettings.fallbackModel !== currentModel
-      ) {
-        handleAutoSwitch(initialSettings.fallbackModel);
+        // Auto-switch if current model goes offline and auto-switch is enabled
+        const currentModelStatus = statuses[currentModel];
+        if (
+          initialSettings.autoSwitchOnError &&
+          currentModelStatus &&
+          (currentModelStatus.status === "offline" ||
+            currentModelStatus.status === "error") &&
+          initialSettings.fallbackEnabled &&
+          initialSettings.fallbackModel &&
+          initialSettings.fallbackModel !== currentModel
+        ) {
+          handleAutoSwitch(initialSettings.fallbackModel);
+        }
       }
-    });
+    );
 
     // Listen for settings changes
-    const unsubscribeSettings = aiModelSettingsService.addSettingsListener((newSettings) => {
-      setSettings(newSettings);
-      setCurrentModel(newSettings.preferredModel);
-    });
+    const unsubscribeSettings = aiModelSettingsService.addSettingsListener(
+      (newSettings) => {
+        setSettings(newSettings);
+        setCurrentModel(newSettings.preferredModel);
+      }
+    );
 
     // Get initial statuses
     setModelStatuses(aiModelStatusService.getAllStatuses());
@@ -112,25 +135,28 @@ export default function EnhancedAIChatWithModelSelector({
   }, [currentModel]);
 
   // Auto-switch to fallback model
-  const handleAutoSwitch = useCallback((fallbackModelId: string) => {
-    setAutoFallbackTriggered(true);
-    setCurrentModel(fallbackModelId);
-    aiModelSettingsService.setPreferredModel(fallbackModelId);
+  const handleAutoSwitch = useCallback(
+    (fallbackModelId: string) => {
+      setAutoFallbackTriggered(true);
+      setCurrentModel(fallbackModelId);
+      aiModelSettingsService.setPreferredModel(fallbackModelId);
 
-    toast({
-      title: "Model Auto-Switched",
-      description: `Switched to fallback model due to connectivity issues.`,
-      variant: "default",
-    });
+      toast({
+        title: "Model Auto-Switched",
+        description: `Switched to fallback model due to connectivity issues.`,
+        variant: "default",
+      });
 
-    setTimeout(() => setAutoFallbackTriggered(false), 5000);
-  }, [toast]);
+      setTimeout(() => setAutoFallbackTriggered(false), 5000);
+    },
+    [toast]
+  );
 
   // Notify parent of status changes
   useEffect(() => {
     if (onStatusChange) {
       onStatusChange({
-        connectionStatus: modelStatuses[currentModel]?.status || 'unknown',
+        connectionStatus: modelStatuses[currentModel]?.status || "unknown",
         error: modelStatuses[currentModel]?.errorMessage,
         currentModel,
       });
@@ -142,7 +168,8 @@ export default function EnhancedAIChatWithModelSelector({
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     } else if (messagesContainerRef.current) {
-      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+      messagesContainerRef.current.scrollTop =
+        messagesContainerRef.current.scrollHeight;
     }
     if (force) {
       setShowScrollToBottom(false);
@@ -152,7 +179,8 @@ export default function EnhancedAIChatWithModelSelector({
   // Handle scroll detection
   const handleScroll = useCallback(() => {
     if (messagesContainerRef.current) {
-      const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
+      const { scrollTop, scrollHeight, clientHeight } =
+        messagesContainerRef.current;
       const isAtBottom = scrollTop + clientHeight >= scrollHeight - 100;
       setShowScrollToBottom(!isAtBottom && messages.length > 0);
     }
@@ -170,23 +198,26 @@ export default function EnhancedAIChatWithModelSelector({
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (container) {
-      container.addEventListener('scroll', handleScroll);
+      container.addEventListener("scroll", handleScroll);
       handleScroll();
       return () => {
-        container.removeEventListener('scroll', handleScroll);
+        container.removeEventListener("scroll", handleScroll);
       };
     }
   }, [handleScroll]);
 
   // Handle model change
-  const handleModelChange = useCallback((modelId: string) => {
-    setCurrentModel(modelId);
-    onModelChange?.(modelId);
-    aiModelSettingsService.setPreferredModel(modelId);
-  }, [onModelChange]);
+  const handleModelChange = useCallback(
+    (modelId: string) => {
+      setCurrentModel(modelId);
+      onModelChange?.(modelId);
+      aiModelSettingsService.setPreferredModel(modelId);
+    },
+    [onModelChange]
+  );
 
   // Send message with model selection
-  const handleSendMessage = async () => {
+  const handleSendMessage = useCallback(async () => {
     const trimmed = message.trim();
     if (!trimmed || isLoading || !userId) return;
 
@@ -197,42 +228,47 @@ export default function EnhancedAIChatWithModelSelector({
     // Add user message
     const userMessage = {
       id: `user_${Date.now()}`,
-      role: 'user' as const,
+      role: "user" as const,
       content: trimmed,
       timestamp: new Date().toISOString(),
+      conversation_id: "chat",
+      author_id: userId || "anonymous",
+      created_at: new Date().toISOString(),
+      metadata: {},
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    setMessages((prev) => [...prev, userMessage]);
 
     try {
       const startTime = Date.now();
-      let endpoint = '/api/ai/chat'; // Default cloud endpoint
+      let endpoint = "/api/ai/chat"; // Default cloud endpoint
       let selectedModel = currentModel;
 
       // Hybrid mode logic
-      if (currentModel === 'hybrid-smart' && settings.enableHybridMode) {
+      if (currentModel === "hybrid-smart" && settings.enableHybridMode) {
         // Choose best model based on request type and availability
-        const localModelStatus = modelStatuses['deepseek-coder-6.7b'];
-        const cloudModelStatus = modelStatuses['gemini-pro'];
+        const localModelStatus = modelStatuses["deepseek-coder-6.7b"];
+        const cloudModelStatus = modelStatuses["gemini-pro"];
 
         // Prefer local for code-related queries if it's online
-        const isCodeRequest = /\b(code|function|debug|programming|algorithm)\b/i.test(trimmed);
+        const isCodeRequest =
+          /\b(code|function|debug|programming|algorithm)\b/i.test(trimmed);
 
-        if (isCodeRequest && localModelStatus?.status === 'online') {
-          selectedModel = 'deepseek-coder-6.7b';
-          endpoint = '/api/local-ai/chat';
-        } else if (cloudModelStatus?.status === 'online') {
-          selectedModel = 'gemini-pro';
-          endpoint = '/api/ai/chat';
-        } else if (localModelStatus?.status === 'online') {
-          selectedModel = 'deepseek-coder-6.7b';
-          endpoint = '/api/local-ai/chat';
+        if (isCodeRequest && localModelStatus?.status === "online") {
+          selectedModel = "deepseek-coder-6.7b";
+          endpoint = "/api/local-ai/chat";
+        } else if (cloudModelStatus?.status === "online") {
+          selectedModel = "gemini-pro";
+          endpoint = "/api/ai/chat";
+        } else if (localModelStatus?.status === "online") {
+          selectedModel = "deepseek-coder-6.7b";
+          endpoint = "/api/local-ai/chat";
         } else {
-          throw new Error('No models are currently available');
+          throw new Error("No models are currently available");
         }
       } else {
         // Use selected model
-        const modelConfig = DEFAULT_MODELS.find(m => m.id === currentModel);
+        const modelConfig = DEFAULT_MODELS.find((m) => m.id === currentModel);
         if (modelConfig) {
           endpoint = modelConfig.endpoint;
         }
@@ -240,17 +276,17 @@ export default function EnhancedAIChatWithModelSelector({
 
       // Make API request
       const response = await fetch(endpoint, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           message: trimmed,
           context: {
             projectId,
-            conversationId: 'chat',
+            conversationId: "chat",
             timestamp: new Date().toISOString(),
-          }
+          },
         }),
       });
 
@@ -258,32 +294,51 @@ export default function EnhancedAIChatWithModelSelector({
       const responseTime = Date.now() - startTime;
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to send message');
+        throw new Error(data.error || "Failed to send message");
       }
 
       // Record successful request
-      aiModelStatusService.recordModelRequest(selectedModel, true, responseTime, data.metadata?.tokensUsed);
+      aiModelStatusService.recordModelRequest(
+        selectedModel,
+        true,
+        responseTime,
+        data.metadata?.tokensUsed
+      );
 
       // Add AI response
       const aiMessage = {
         id: `ai_${Date.now()}`,
-        role: 'assistant' as const,
-        content: data.response || data.message || 'Sorry, I encountered an error processing your request.',
+        role: "assistant" as const,
+        content:
+          data.response ||
+          data.message ||
+          "Sorry, I encountered an error processing your request.",
         timestamp: new Date().toISOString(),
         modelUsed: selectedModel,
         responseTime,
+        conversation_id: "chat",
+        author_id: "ai-assistant",
+        created_at: new Date().toISOString(),
+        metadata: {
+          ai_model: selectedModel,
+          ai_response_time_ms: responseTime,
+          ai_tokens_used: data.metadata?.tokensUsed,
+        },
       };
 
-      setMessages(prev => [...prev, aiMessage]);
-
+      setMessages((prev) => [...prev, aiMessage]);
     } catch (error) {
-      console.error('Failed to send message:', error);
+      console.error("Failed to send message:", error);
 
       // Record failed request
       aiModelStatusService.recordModelRequest(currentModel, false, 0);
 
       // Try fallback if enabled
-      if (settings.fallbackEnabled && settings.fallbackModel && settings.fallbackModel !== currentModel) {
+      if (
+        settings.fallbackEnabled &&
+        settings.fallbackModel &&
+        settings.fallbackModel !== currentModel
+      ) {
         try {
           toast({
             title: "Primary Model Failed",
@@ -291,21 +346,23 @@ export default function EnhancedAIChatWithModelSelector({
             variant: "default",
           });
 
-          const fallbackModel = DEFAULT_MODELS.find(m => m.id === settings.fallbackModel);
+          const fallbackModel = DEFAULT_MODELS.find(
+            (m) => m.id === settings.fallbackModel
+          );
           if (fallbackModel) {
             const fallbackResponse = await fetch(fallbackModel.endpoint, {
-              method: 'POST',
+              method: "POST",
               headers: {
-                'Content-Type': 'application/json',
+                "Content-Type": "application/json",
               },
               body: JSON.stringify({
                 message: trimmed,
                 context: {
                   projectId,
-                  conversationId: 'chat',
+                  conversationId: "chat",
                   timestamp: new Date().toISOString(),
                   isFallback: true,
-                }
+                },
               }),
             });
 
@@ -314,14 +371,24 @@ export default function EnhancedAIChatWithModelSelector({
             if (fallbackResponse.ok) {
               const fallbackMessage = {
                 id: `ai_fallback_${Date.now()}`,
-                role: 'assistant' as const,
-                content: fallbackData.response || fallbackData.message || 'Sorry, I encountered an error.',
+                role: "assistant" as const,
+                content:
+                  fallbackData.response ||
+                  fallbackData.message ||
+                  "Sorry, I encountered an error.",
                 timestamp: new Date().toISOString(),
                 modelUsed: settings.fallbackModel,
                 responseTime: 0,
+                conversation_id: "chat",
+                author_id: "ai-assistant",
+                created_at: new Date().toISOString(),
+                metadata: {
+                  ai_model: settings.fallbackModel,
+                  fallback: true,
+                },
               };
 
-              setMessages(prev => [...prev, fallbackMessage]);
+              setMessages((prev) => [...prev, fallbackMessage]);
 
               toast({
                 title: "Fallback Model Used",
@@ -329,19 +396,29 @@ export default function EnhancedAIChatWithModelSelector({
                 variant: "default",
               });
             } else {
-              throw new Error('Fallback also failed');
+              throw new Error("Fallback also failed");
             }
           }
         } catch (fallbackError) {
           // Both primary and fallback failed
-          setMessages(prev => [...prev, {
-            id: `ai_error_${Date.now()}`,
-            role: 'assistant' as const,
-            content: 'Sorry, I\'m having trouble connecting right now. Please try again in a moment.',
-            timestamp: new Date().toISOString(),
-            modelUsed: 'error',
-            responseTime: 0,
-          }]);
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `ai_error_${Date.now()}`,
+              role: "assistant" as const,
+              content:
+                "Sorry, I'm having trouble connecting right now. Please try again in a moment.",
+              timestamp: new Date().toISOString(),
+              modelUsed: "error",
+              responseTime: 0,
+              conversation_id: "chat",
+              author_id: "ai-assistant",
+              created_at: new Date().toISOString(),
+              metadata: {
+                error: true,
+              },
+            },
+          ]);
 
           toast({
             title: "Message Failed",
@@ -351,18 +428,29 @@ export default function EnhancedAIChatWithModelSelector({
         }
       } else {
         // No fallback enabled or fallback failed
-        setMessages(prev => [...prev, {
-          id: `ai_error_${Date.now()}`,
-          role: 'assistant' as const,
-          content: 'Sorry, I\'m having trouble connecting right now. Please try again in a moment.',
-          timestamp: new Date().toISOString(),
-          modelUsed: 'error',
-          responseTime: 0,
-        }]);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `ai_error_${Date.now()}`,
+            role: "assistant" as const,
+            content:
+              "Sorry, I'm having trouble connecting right now. Please try again in a moment.",
+            timestamp: new Date().toISOString(),
+            modelUsed: "error",
+            responseTime: 0,
+            conversation_id: "chat",
+            author_id: "ai-assistant",
+            created_at: new Date().toISOString(),
+            metadata: {
+              error: true,
+            },
+          },
+        ]);
 
         toast({
           title: "Message Failed",
-          description: error instanceof Error ? error.message : "Unknown error occurred",
+          description:
+            error instanceof Error ? error.message : "Unknown error occurred",
           variant: "destructive",
         });
       }
@@ -370,9 +458,18 @@ export default function EnhancedAIChatWithModelSelector({
       setIsLoading(false);
       setIsTyping(false);
     }
-  }, [message, isLoading, userId, projectId, currentModel, settings, modelStatuses, toast]);
+  }, [
+    message,
+    isLoading,
+    userId,
+    projectId,
+    currentModel,
+    settings,
+    modelStatuses,
+    toast,
+  ]);
 
-  const currentModelConfig = DEFAULT_MODELS.find(m => m.id === currentModel);
+  const currentModelConfig = DEFAULT_MODELS.find((m) => m.id === currentModel);
   const currentModelStatus = modelStatuses[currentModel];
 
   return (
@@ -389,7 +486,10 @@ export default function EnhancedAIChatWithModelSelector({
 
               {/* Auto-fallback indicator */}
               {autoFallbackTriggered && (
-                <Badge variant="outline" className="gap-1 text-yellow-600 border-yellow-200">
+                <Badge
+                  variant="outline"
+                  className="gap-1 text-yellow-600 border-yellow-200"
+                >
                   <AlertTriangle className="h-3 w-3" />
                   Auto-switched to fallback
                 </Badge>
@@ -422,7 +522,8 @@ export default function EnhancedAIChatWithModelSelector({
               <Zap className="h-3 w-3" />
               <span>
                 Using {currentModelConfig.name}
-                {currentModelConfig.provider === 'hybrid' && ' (Smart Selection)'}
+                {currentModelConfig.provider === "hybrid" &&
+                  " (Smart Selection)"}
               </span>
               {currentModelStatus?.responseTime && (
                 <span>• {currentModelStatus.responseTime}ms response time</span>
@@ -432,7 +533,31 @@ export default function EnhancedAIChatWithModelSelector({
 
           {/* Health summary */}
           {showHealthSummary && (
-            <AIModelHealthSummary models={DEFAULT_MODELS} className="mt-3" />
+            <div className="mt-3 p-3 bg-muted rounded-lg">
+              <div className="text-sm font-medium mb-2">
+                Model Health Summary
+              </div>
+              <div className="grid grid-cols-1 gap-2">
+                {DEFAULT_MODELS.map((model) => {
+                  const status = modelStatuses[model.id];
+                  return (
+                    <div
+                      key={model.id}
+                      className="flex items-center justify-between text-xs"
+                    >
+                      <span>{model.name}</span>
+                      <Badge
+                        variant={
+                          status?.status === "online" ? "default" : "secondary"
+                        }
+                      >
+                        {status?.status || "unknown"}
+                      </Badge>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           )}
         </CardHeader>
 
@@ -447,7 +572,8 @@ export default function EnhancedAIChatWithModelSelector({
               </div>
               <h3 className="text-lg font-semibold mb-2">AI Assistant</h3>
               <p className="text-muted-foreground text-sm mb-6 max-w-lg">
-                Ask me anything about coding, debugging, or learning. I'll use the best available model to help you.
+                Ask me anything about coding, debugging, or learning. I'll use
+                the best available model to help you.
               </p>
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <span>Model: {currentModelConfig?.name}</span>
@@ -476,21 +602,32 @@ export default function EnhancedAIChatWithModelSelector({
           <div className="flex gap-2">
             <Input
               placeholder={
-                currentModelConfig?.provider === 'local'
+                currentModelConfig?.provider === "local"
                   ? "Ask me anything (Local AI)..."
-                  : currentModelConfig?.provider === 'cloud'
+                  : currentModelConfig?.provider === "cloud"
                   ? "Ask me anything (Cloud AI)..."
                   : "Ask me anything (Smart Selection)..."
               }
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              onKeyPress={(e) => e.key === "Enter" && !e.shiftKey && handleSendMessage()}
-              disabled={isLoading || !currentModelStatus || currentModelStatus.status === 'offline'}
+              onKeyPress={(e) =>
+                e.key === "Enter" && !e.shiftKey && handleSendMessage()
+              }
+              disabled={
+                isLoading ||
+                !currentModelStatus ||
+                currentModelStatus.status === "offline"
+              }
               className="flex-1"
             />
             <Button
               onClick={handleSendMessage}
-              disabled={isLoading || !message.trim() || !currentModelStatus || currentModelStatus.status === 'offline'}
+              disabled={
+                isLoading ||
+                !message.trim() ||
+                !currentModelStatus ||
+                currentModelStatus.status === "offline"
+              }
             >
               {isLoading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -510,7 +647,7 @@ export default function EnhancedAIChatWithModelSelector({
                   <span>Response: {currentModelStatus.responseTime}ms</span>
                 )}
               </div>
-              {currentModelStatus?.status === 'offline' && (
+              {currentModelStatus?.status === "offline" && (
                 <span className="text-red-500">Model is offline</span>
               )}
             </div>
