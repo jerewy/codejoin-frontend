@@ -7,10 +7,19 @@ export const LoginGoogle = () => {
   const supabase = getSupabaseClient();
   const handleLogin = async () => {
     if (!supabase) return;
+
+    // Get the current origin for dynamic redirect
+    const redirectTo =
+      typeof window !== "undefined"
+        ? `${window.location.origin}/dashboard`
+        : process.env.NEXT_PUBLIC_SITE_URL
+        ? `${process.env.NEXT_PUBLIC_SITE_URL}/dashboard`
+        : "http://localhost:3000/dashboard";
+
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: "http://localhost:3000/dashboard",
+        redirectTo,
       },
     });
   };
