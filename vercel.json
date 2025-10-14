@@ -2,10 +2,7 @@
   "version": 2,
   "env": {
     "NEXT_PUBLIC_SUPABASE_URL": "@supabase-url",
-    "NEXT_PUBLIC_SUPABASE_ANON_KEY": {
-      "value": "@supabase-anon-key",
-      "description": "Supabase Anonymous Key - Safe for client-side use"
-    },
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@supabase-anon-key",
     "NEXT_PUBLIC_API_URL": "@backend-url",
     "NEXT_PUBLIC_SOCKET_URL": "@socket-url",
     "NEXT_PUBLIC_SITE_URL": "@site-url",
