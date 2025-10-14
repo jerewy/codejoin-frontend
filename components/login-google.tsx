@@ -8,18 +8,30 @@ export const LoginGoogle = () => {
   const handleLogin = async () => {
     if (!supabase) return;
 
-    // Get the current origin for dynamic redirect
-    const redirectTo =
-      typeof window !== "undefined"
-        ? `${window.location.origin}/auth/callback`
-        : process.env.NEXT_PUBLIC_SITE_URL
-        ? `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`
-        : "http://localhost:3000/auth/callback";
+    // Use proper redirect URL logic for both development and production
+    const getRedirectURL = () => {
+      // Check if we're in the browser
+      if (typeof window !== "undefined") {
+        return `${window.location.origin}/auth/callback`;
+      }
+
+      // Fallback for server-side
+      const siteURL = process.env.NEXT_PUBLIC_SITE_URL;
+      const vercelURL = process.env.NEXT_PUBLIC_VERCEL_URL;
+
+      if (siteURL) {
+        return `${siteURL}/auth/callback`;
+      } else if (vercelURL) {
+        return `https://${vercelURL}/auth/callback`;
+      } else {
+        return "http://localhost:3000/auth/callback";
+      }
+    };
 
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo,
+        redirectTo: getRedirectURL(),
       },
     });
   };

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +16,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Loader2, AlertCircle } from "lucide-react";
 import { LoginGoogle } from "@/components/login-google";
 import { LoginGithub } from "@/components/login-github";
 import { useRouter } from "next/navigation";
@@ -26,8 +27,39 @@ export default function LoginCard() {
   const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState({ email: "", password: "" });
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = getSupabaseClient();
   const authUnavailable = !supabase;
+
+  // Helper function to get the correct redirect URL
+  const getRedirectURL = () => {
+    if (typeof window !== "undefined") {
+      return `${window.location.origin}/dashboard`;
+    }
+
+    const siteURL = process.env.NEXT_PUBLIC_SITE_URL;
+    const vercelURL = process.env.NEXT_PUBLIC_VERCEL_URL;
+
+    if (siteURL) {
+      return `${siteURL}/dashboard`;
+    } else if (vercelURL) {
+      return `https://${vercelURL}/dashboard`;
+    } else {
+      return "http://localhost:3000/dashboard";
+    }
+  };
+
+  // Handle error messages from URL params (e.g., from OAuth callback)
+  useEffect(() => {
+    const urlError = searchParams.get("error");
+    if (urlError) {
+      setError(decodeURIComponent(urlError));
+      // Clear the error from URL to prevent it from persisting
+      const url = new URL(window.location.href);
+      url.searchParams.delete("error");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,7 +88,10 @@ export default function LoginCard() {
     if (error) {
       setError(error.message); // Supabase returns helpful error messages
     } else {
-      router.push("/dashboard");
+      // Add a small delay to ensure auth state is updated before redirect
+      setTimeout(() => {
+        router.push(getRedirectURL());
+      }, 100);
     }
 
     setIsLoading(false);
@@ -92,8 +127,9 @@ export default function LoginCard() {
 
         {/* Show error if any */}
         {error && (
-          <div className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-400">
-            {error}
+          <div className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-400 flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 flex-shrink-0" />
+            <span>{error}</span>
           </div>
         )}
 

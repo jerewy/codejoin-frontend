@@ -28,59 +28,19 @@ import { getSupabaseClient } from "@/lib/supabaseClient";
 export default function LandingPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [isHandlingAuth, setIsHandlingAuth] = useState(false);
   const supabase = getSupabaseClient();
 
-  // Handle OAuth callback with code parameter (fallback for cases where OAuth redirects to root)
+  // Handle OAuth callback with code parameter - redirect to dedicated auth callback page
   useEffect(() => {
     const code = searchParams.get("code");
 
-    if (code && supabase && !isHandlingAuth) {
-      setIsHandlingAuth(true);
-
-      const handleOAuthCallback = async () => {
-        try {
-          // Exchange the code for a session
-          const { data, error } = await supabase.auth.exchangeCodeForSession(
-            code
-          );
-
-          if (error) {
-            console.error("Error exchanging code for session:", error);
-            router.push("/login");
-            return;
-          }
-
-          if (data.session) {
-            // Successfully authenticated, redirect to dashboard
-            router.push("/dashboard");
-          } else {
-            // No session found, redirect to login
-            router.push("/login");
-          }
-        } catch (error) {
-          console.error("Error during OAuth callback:", error);
-          router.push("/login");
-        } finally {
-          setIsHandlingAuth(false);
-        }
-      };
-
-      handleOAuthCallback();
+    if (code && supabase) {
+      // If we have a code parameter, redirect to the proper auth callback page
+      const currentURL = window.location.href;
+      const authCallbackURL = currentURL.replace(window.location.pathname, "/auth/callback");
+      router.push(authCallbackURL);
     }
-  }, [searchParams, supabase, router, isHandlingAuth]);
-
-  // Show loading state while handling authentication
-  if (isHandlingAuth) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-muted">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Completing authentication...</p>
-        </div>
-      </div>
-    );
-  }
+  }, [searchParams, supabase, router]);
   const heroStats = [
     { value: "8k+", label: "Live coding sessions every day" },
     { value: "120k", label: "Lines synchronized each minute" },

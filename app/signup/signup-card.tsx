@@ -36,6 +36,24 @@ export default function SignupCard() {
   const supabase = getSupabaseClient();
   const authUnavailable = !supabase;
 
+  // Helper function to get the correct redirect URL
+  const getRedirectURL = () => {
+    if (typeof window !== "undefined") {
+      return `${window.location.origin}/auth/callback`;
+    }
+
+    const siteURL = process.env.NEXT_PUBLIC_SITE_URL;
+    const vercelURL = process.env.NEXT_PUBLIC_VERCEL_URL;
+
+    if (siteURL) {
+      return `${siteURL}/auth/callback`;
+    } else if (vercelURL) {
+      return `https://${vercelURL}/auth/callback`;
+    } else {
+      return "http://localhost:3000/auth/callback";
+    }
+  };
+
   const [passwordValidation, setPasswordValidation] = useState({
     minLength: false,
     hasUppercase: false,
@@ -96,7 +114,7 @@ export default function SignupCard() {
             full_name: formData.name,
             user_avatar: DEFAULT_AVATAR,
           },
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          emailRedirectTo: getRedirectURL(),
         },
       });
 

@@ -132,37 +132,21 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   // For protected routes where auth is configured but user is not logged in,
-  // redirect to login instead of showing access denied
-  if (isProtectedRoute && !isLoggedIn && typeof window !== "undefined") {
-    // Check if this might be a fresh login redirect by looking at referrer
-    const referrer = document.referrer;
-    const fromLogin = referrer.includes("/login") || referrer.includes("/auth/callback");
-
-    if (fromLogin) {
-      // If coming from login, wait a bit longer for auth state to update
-      setTimeout(() => {
-        window.location.href = "/dashboard";
-      }, 1000);
-      return (
-        <div className="flex items-center justify-center min-h-screen bg-muted">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-            <p className="text-muted-foreground">Completing login...</p>
-          </div>
+  // show access denied (don't redirect to avoid loops)
+  if (isProtectedRoute && !isLoggedIn) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-muted">
+        <div className="text-center">
+          <h1 className="text-2xl font-semibold mb-4">Authentication Required</h1>
+          <p className="text-muted-foreground mb-6">
+            You must be logged in to access this page.
+          </p>
+          <Button asChild>
+            <Link href="/login">Log In</Link>
+          </Button>
         </div>
-      );
-    } else {
-      // Otherwise redirect to login
-      window.location.href = "/login";
-      return (
-        <div className="flex items-center justify-center min-h-screen bg-muted">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-            <p className="text-muted-foreground">Redirecting to login...</p>
-          </div>
-        </div>
-      );
-    }
+      </div>
+    );
   }
 
   // If the route has a sidebar, render the full dashboard layout
