@@ -32,7 +32,10 @@ export default function AuthCallbackPage() {
         }
 
         if (data.session) {
-          router.push("/dashboard");
+          // Add a small delay to ensure auth state is properly set
+          setTimeout(() => {
+            router.push("/dashboard");
+          }, 100);
           return;
         }
       } else {
@@ -40,7 +43,10 @@ export default function AuthCallbackPage() {
         const { data } = await supabase.auth.getSession();
 
         if (data.session) {
-          router.push("/dashboard");
+          // Add a small delay to ensure auth state is properly set
+          setTimeout(() => {
+            router.push("/dashboard");
+          }, 100);
           return;
         }
       }
