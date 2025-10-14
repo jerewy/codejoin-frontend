@@ -9,6 +9,7 @@
     "start": "next start",
     "start:server": "NODE_ENV=production next start",
     "lint": "next lint",
+    "check:backend": "node -r dotenv/config scripts/check-backend.js dotenv_config_path=.env.local",
     "migrate-ai-service": "tsx scripts/migrate-ai-conversation-service.ts",
     "migrate-ai-service:dry": "tsx scripts/migrate-ai-conversation-service.ts --dry-run",
     "migrate-ai-service:force": "tsx scripts/migrate-ai-conversation-service.ts --force",

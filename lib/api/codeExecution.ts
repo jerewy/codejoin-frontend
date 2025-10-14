@@ -36,13 +36,20 @@ class CodeExecutionAPI {
   private apiKey: string;
   private timeout: number;
 
-  constructor(baseURL = 'http://localhost:3001', apiKey = 'test123', timeout = 30000) {
+  constructor(
+    baseURL = "https://codejoin-backend.onrender.com",
+    apiKey = "test123",
+    timeout = 30000
+  ) {
     this.baseURL = baseURL;
     this.apiKey = apiKey;
     this.timeout = timeout;
   }
 
-  private async makeRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  private async makeRequest<T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<T> {
     const url = `${this.baseURL}${endpoint}`;
 
     const controller = new AbortController();
@@ -52,8 +59,8 @@ class CodeExecutionAPI {
       const response = await fetch(url, {
         ...options,
         headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': this.apiKey,
+          "Content-Type": "application/json",
+          "X-API-Key": this.apiKey,
           ...options.headers,
         },
         signal: controller.signal,
@@ -67,12 +74,14 @@ class CodeExecutionAPI {
 
         try {
           const errorJson = JSON.parse(errorBody);
-          errorMessage = errorJson.error || errorJson.message || 'API request failed';
+          errorMessage =
+            errorJson.error || errorJson.message || "API request failed";
         } catch (jsonParseError) {
           // If the response isn't valid JSON, use the raw text or default message
-          errorMessage = errorBody.length > 0 && errorBody.length < 500
-            ? errorBody
-            : `HTTP ${response.status}: ${response.statusText}`;
+          errorMessage =
+            errorBody.length > 0 && errorBody.length < 500
+              ? errorBody
+              : `HTTP ${response.status}: ${response.statusText}`;
         }
 
         throw new Error(errorMessage);
@@ -82,18 +91,23 @@ class CodeExecutionAPI {
       try {
         data = await response.json();
       } catch (jsonError) {
-        throw new Error('Invalid JSON response from server');
+        throw new Error("Invalid JSON response from server");
       }
       return data as T;
     } catch (error) {
       clearTimeout(timeoutId);
 
-      if (error instanceof Error && error.name === 'AbortError') {
-        throw new Error('Request timeout: The backend may not be running or responding');
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new Error(
+          "Request timeout: The backend may not be running or responding"
+        );
       }
 
-      if (error instanceof TypeError && error.message.includes('fetch')) {
-        throw new Error('Connection failed: Backend server is not reachable. Make sure it\'s running on ' + this.baseURL);
+      if (error instanceof TypeError && error.message.includes("fetch")) {
+        throw new Error(
+          "Connection failed: Backend server is not reachable. Make sure it's running on " +
+            this.baseURL
+        );
       }
 
       throw error;
@@ -102,10 +116,13 @@ class CodeExecutionAPI {
 
   async executeCode(request: ExecuteCodeRequest): Promise<ExecuteCodeResponse> {
     try {
-      const response = await this.makeRequest<ExecuteCodeResponse>('/api/execute', {
-        method: 'POST',
-        body: JSON.stringify(request),
-      });
+      const response = await this.makeRequest<ExecuteCodeResponse>(
+        "/api/execute",
+        {
+          method: "POST",
+          body: JSON.stringify(request),
+        }
+      );
 
       return response;
     } catch (error) {
@@ -113,8 +130,9 @@ class CodeExecutionAPI {
       return {
         success: false,
         language: request.language,
-        output: '',
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
+        output: "",
+        error:
+          error instanceof Error ? error.message : "Unknown error occurred",
         exitCode: 1,
         executionTime: 0,
         timestamp: new Date().toISOString(),
@@ -124,7 +142,7 @@ class CodeExecutionAPI {
 
   async getSupportedLanguages(): Promise<LanguagesResponse> {
     try {
-      return await this.makeRequest<LanguagesResponse>('/api/languages');
+      return await this.makeRequest<LanguagesResponse>("/api/languages");
     } catch (error) {
       return {
         success: false,
@@ -134,19 +152,30 @@ class CodeExecutionAPI {
     }
   }
 
-  async healthCheck(): Promise<{ status: string; timestamp: string; uptime: number; version: string }> {
+  async healthCheck(): Promise<{
+    status: string;
+    timestamp: string;
+    uptime: number;
+    version: string;
+  }> {
     try {
-      return await this.makeRequest('/health');
+      return await this.makeRequest("/health");
     } catch (error) {
-      throw new Error('Backend health check failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      throw new Error(
+        "Backend health check failed: " +
+          (error instanceof Error ? error.message : "Unknown error")
+      );
     }
   }
 
   async getSystemInfo(): Promise<any> {
     try {
-      return await this.makeRequest('/api/system');
+      return await this.makeRequest("/api/system");
     } catch (error) {
-      throw new Error('System info request failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      throw new Error(
+        "System info request failed: " +
+          (error instanceof Error ? error.message : "Unknown error")
+      );
     }
   }
 
@@ -162,40 +191,40 @@ class CodeExecutionAPI {
 
   // Utility method to detect language from file extension
   detectLanguageFromFileName(fileName: string): string {
-    const ext = fileName.split('.').pop()?.toLowerCase();
+    const ext = fileName.split(".").pop()?.toLowerCase();
 
     const languageMap: Record<string, string> = {
-      'js': 'javascript',
-      'jsx': 'javascript',
-      'ts': 'typescript',
-      'tsx': 'typescript',
-      'py': 'python',
-      'java': 'java',
-      'cpp': 'cpp',
-      'cc': 'cpp',
-      'cxx': 'cpp',
-      'c': 'c',
-      'cs': 'csharp',
-      'php': 'php',
-      'rb': 'ruby',
-      'go': 'go',
-      'rs': 'rust',
-      'sh': 'shell',
-      'bash': 'shell',
-      'ps1': 'powershell',
-      'r': 'r',
-      'dart': 'dart',
-      'kt': 'kotlin',
-      'scala': 'scala',
-      'swift': 'swift',
-      'hs': 'haskell',
-      'ml': 'ocaml',
-      'ex': 'elixir',
-      'lua': 'lua',
-      'pl': 'perl',
+      js: "javascript",
+      jsx: "javascript",
+      ts: "typescript",
+      tsx: "typescript",
+      py: "python",
+      java: "java",
+      cpp: "cpp",
+      cc: "cpp",
+      cxx: "cpp",
+      c: "c",
+      cs: "csharp",
+      php: "php",
+      rb: "ruby",
+      go: "go",
+      rs: "rust",
+      sh: "shell",
+      bash: "shell",
+      ps1: "powershell",
+      r: "r",
+      dart: "dart",
+      kt: "kotlin",
+      scala: "scala",
+      swift: "swift",
+      hs: "haskell",
+      ml: "ocaml",
+      ex: "elixir",
+      lua: "lua",
+      pl: "perl",
     };
 
-    return languageMap[ext || ''] || 'plaintext';
+    return languageMap[ext || ""] || "plaintext";
   }
 }
 
@@ -203,4 +232,9 @@ class CodeExecutionAPI {
 const codeExecutionAPI = new CodeExecutionAPI();
 
 export { codeExecutionAPI, CodeExecutionAPI };
-export type { ExecuteCodeRequest, ExecuteCodeResponse, SupportedLanguage, LanguagesResponse };
+export type {
+  ExecuteCodeRequest,
+  ExecuteCodeResponse,
+  SupportedLanguage,
+  LanguagesResponse,
+};

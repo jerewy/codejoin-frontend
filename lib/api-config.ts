@@ -12,8 +12,14 @@ const getEnvVar = (key: string, fallback: string) => {
 };
 
 export const API_CONFIG = {
-  BACKEND_URL: getEnvVar("NEXT_PUBLIC_API_URL", "http://localhost:3001"),
-  SOCKET_URL: getEnvVar("NEXT_PUBLIC_SOCKET_URL", "http://localhost:3002"),
+  BACKEND_URL: getEnvVar(
+    "NEXT_PUBLIC_API_URL",
+    "https://codejoin-backend.onrender.com"
+  ),
+  SOCKET_URL: getEnvVar(
+    "NEXT_PUBLIC_SOCKET_URL",
+    "https://codejoin-backend.onrender.com"
+  ),
   SUPABASE_URL: getEnvVar("NEXT_PUBLIC_SUPABASE_URL", ""),
   SUPABASE_ANON_KEY: getEnvVar("NEXT_PUBLIC_SUPABASE_ANON_KEY", ""),
   SITE_URL: getEnvVar(

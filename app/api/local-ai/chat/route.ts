@@ -1,8 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from "next/server";
 
 // POST /api/local-ai/chat - Local AI chat endpoint
 export async function POST(request: NextRequest) {
-  const requestId = `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const requestId = `local_${Date.now()}_${Math.random()
+    .toString(36)
+    .substr(2, 9)}`;
   const startTime = Date.now();
 
   try {
@@ -13,23 +15,24 @@ export async function POST(request: NextRequest) {
 
     if (!message) {
       return NextResponse.json(
-        { error: 'Message is required' },
+        { error: "Message is required" },
         { status: 400 }
       );
     }
 
     // Try backend local AI service
     try {
-      const backendUrl = process.env.AI_BACKEND_URL || 'http://localhost:3001';
-      const backendApiKey = process.env.AI_BACKEND_API_KEY || 'test123';
+      const backendUrl =
+        process.env.BACKEND_URL || "https://codejoin-backend.onrender.com";
+      const backendApiKey = process.env.BACKEND_API_KEY || "test123";
 
       console.log(`Calling backend local AI: ${backendUrl}/api/local-ai/chat`);
 
       const response = await fetch(`${backendUrl}/api/local-ai/chat`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': backendApiKey
+          "Content-Type": "application/json",
+          "X-API-Key": backendApiKey,
         },
         body: JSON.stringify({
           message,
@@ -39,9 +42,9 @@ export async function POST(request: NextRequest) {
             projectId,
             requestId,
             timestamp: new Date().toISOString(),
-            useLocalModel: true
-          }
-        })
+            useLocalModel: true,
+          },
+        }),
       });
 
       if (response.ok) {
@@ -52,71 +55,91 @@ export async function POST(request: NextRequest) {
           success: true,
           response: data.response || data.message,
           metadata: {
-            model: data.metadata?.model || 'deepseek-coder-6.7b',
-            provider: data.metadata?.provider || 'Local AI',
+            model: data.metadata?.model || "deepseek-coder-6.7b",
+            provider: data.metadata?.provider || "Local AI",
             tokensUsed: data.metadata?.tokensUsed || 0,
             responseTime: Date.now() - startTime,
             requestId,
             backend: true,
-            local: true
-          }
+            local: true,
+          },
         });
       } else {
         const errorData = await response.text();
-        console.error('Backend local AI error response:', response.status, errorData);
-        throw new Error(`Backend local AI returned ${response.status}: ${errorData}`);
+        console.error(
+          "Backend local AI error response:",
+          response.status,
+          errorData
+        );
+        throw new Error(
+          `Backend local AI returned ${response.status}: ${errorData}`
+        );
       }
     } catch (backendError) {
-      console.error('Backend local AI error:', backendError);
+      console.error("Backend local AI error:", backendError);
 
       // Parse the backend error to get specific details
-      let errorMessage = 'Unknown backend error';
+      let errorMessage = "Unknown backend error";
       let statusCode = 500;
-      let errorType = 'unknown';
+      let errorType = "unknown";
 
       if (backendError instanceof Error) {
         errorMessage = backendError.message;
 
         // Detect specific error types from backend response
-        if (errorMessage.includes('rate limit exceeded') || errorMessage.includes('429')) {
+        if (
+          errorMessage.includes("rate limit exceeded") ||
+          errorMessage.includes("429")
+        ) {
           statusCode = 429;
-          errorType = 'rate_limit';
-        } else if (errorMessage.includes('quota exceeded') || errorMessage.includes('403')) {
+          errorType = "rate_limit";
+        } else if (
+          errorMessage.includes("quota exceeded") ||
+          errorMessage.includes("403")
+        ) {
           statusCode = 403;
-          errorType = 'quota_exceeded';
-        } else if (errorMessage.includes('401')) {
+          errorType = "quota_exceeded";
+        } else if (errorMessage.includes("401")) {
           statusCode = 401;
-          errorType = 'authentication';
-        } else if (errorMessage.includes('Ollama not running') || errorMessage.includes('503')) {
+          errorType = "authentication";
+        } else if (
+          errorMessage.includes("Ollama not running") ||
+          errorMessage.includes("503")
+        ) {
           statusCode = 503;
-          errorType = 'service_unavailable';
-        } else if (errorMessage.includes('model not found') || errorMessage.includes('404')) {
+          errorType = "service_unavailable";
+        } else if (
+          errorMessage.includes("model not found") ||
+          errorMessage.includes("404")
+        ) {
           statusCode = 404;
-          errorType = 'model_not_found';
+          errorType = "model_not_found";
         }
       }
 
       // Return the actual error instead of masking with fallback
-      return NextResponse.json({
-        success: false,
-        error: errorMessage,
-        errorType,
-        requestId,
-        processingTime: Date.now() - startTime,
-        backend: true,
-        local: true
-      }, { status: statusCode });
+      return NextResponse.json(
+        {
+          success: false,
+          error: errorMessage,
+          errorType,
+          requestId,
+          processingTime: Date.now() - startTime,
+          backend: true,
+          local: true,
+        },
+        { status: statusCode }
+      );
     }
-
   } catch (error) {
     console.error(`Error in local AI chat POST: ${requestId}`, error);
     return NextResponse.json(
       {
         success: false,
-        error: 'Internal server error',
-        details: error instanceof Error ? error.message : 'Unknown error',
+        error: "Internal server error",
+        details: error instanceof Error ? error.message : "Unknown error",
         requestId,
-        processingTime: Date.now() - startTime
+        processingTime: Date.now() - startTime,
       },
       { status: 500 }
     );
@@ -128,8 +151,12 @@ function generateLocalAIResponse(message: string): string {
   const messageLower = message.toLowerCase();
 
   // Code-related queries - this is a local coding model
-  if (messageLower.includes('code') || messageLower.includes('function') || messageLower.includes('debug')) {
-    if (messageLower.includes('react')) {
+  if (
+    messageLower.includes("code") ||
+    messageLower.includes("function") ||
+    messageLower.includes("debug")
+  ) {
+    if (messageLower.includes("react")) {
       return `I'll help you with React code! Here's a common pattern:
 
 \`\`\`jsx
@@ -164,7 +191,7 @@ export default MyComponent;
 This pattern includes proper state management, error handling, and loading states. What specific React functionality would you like me to help you with?`;
     }
 
-    if (messageLower.includes('javascript') || messageLower.includes('js')) {
+    if (messageLower.includes("javascript") || messageLower.includes("js")) {
       return `Here's a modern JavaScript solution:
 
 \`\`\`javascript
@@ -201,11 +228,14 @@ Please share the specific code or programming challenge you'd like help with, an
   }
 
   // General responses with coding focus
-  if (messageLower.includes('hello') || messageLower.includes('hi')) {
+  if (messageLower.includes("hello") || messageLower.includes("hi")) {
     return "Hello! I'm your local AI coding assistant. I specialize in code generation, debugging, and technical explanations. What coding challenge can I help you with today?";
   }
 
-  if (messageLower.includes('help') || messageLower.includes('what can you do')) {
+  if (
+    messageLower.includes("help") ||
+    messageLower.includes("what can you do")
+  ) {
     return `I'm a specialized local AI coding assistant that can help you with:
 
 **Core Programming:**
@@ -241,51 +271,51 @@ Could you provide more details about your coding challenge or the specific techn
 export async function GET(request: NextRequest) {
   try {
     // Test backend local AI connection
-    let backendStatus = 'unknown';
+    let backendStatus = "unknown";
     try {
-      const backendUrl = process.env.AI_BACKEND_URL || 'http://localhost:3001';
+      const backendUrl =
+        process.env.BACKEND_URL || "https://codejoin-backend.onrender.com";
       const response = await fetch(`${backendUrl}/api/local-ai/chat`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': process.env.AI_BACKEND_API_KEY || 'test123'
+          "Content-Type": "application/json",
+          "X-API-Key": process.env.BACKEND_API_KEY || "test123",
         },
         body: JSON.stringify({
-          message: 'health_check',
-          context: { test: true }
-        })
+          message: "health_check",
+          context: { test: true },
+        }),
       });
 
       if (response.ok) {
-        backendStatus = 'connected';
+        backendStatus = "connected";
       } else {
-        backendStatus = 'error';
+        backendStatus = "error";
       }
     } catch (error) {
-      backendStatus = 'disconnected';
+      backendStatus = "disconnected";
     }
 
     return NextResponse.json({
-      status: 'operational',
+      status: "operational",
       backend: backendStatus,
-      type: 'local-ai',
+      type: "local-ai",
       timestamp: new Date().toISOString(),
       features: {
         codingSpecialty: true,
         privacy: true,
         offlineCapability: true,
         fastResponse: true,
-        backendIntegration: backendStatus === 'connected'
-      }
+        backendIntegration: backendStatus === "connected",
+      },
     });
-
   } catch (error) {
-    console.error('Error in local AI chat GET:', error);
+    console.error("Error in local AI chat GET:", error);
     return NextResponse.json(
       {
-        status: 'error',
-        error: error.message,
-        timestamp: new Date().toISOString()
+        status: "error",
+        error: error instanceof Error ? error.message : "Unknown error",
+        timestamp: new Date().toISOString(),
       },
       { status: 500 }
     );
