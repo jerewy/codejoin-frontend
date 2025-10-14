@@ -90,7 +90,7 @@ export default function LoginCard() {
     } else {
       // Add a small delay to ensure auth state is updated before redirect
       setTimeout(() => {
-        router.push(getRedirectURL());
+        router.push("/dashboard");
       }, 100);
     }
 

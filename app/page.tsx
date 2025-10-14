@@ -36,9 +36,8 @@ export default function LandingPage() {
 
     if (code && supabase) {
       // If we have a code parameter, redirect to the proper auth callback page
-      const currentURL = window.location.href;
-      const authCallbackURL = currentURL.replace(window.location.pathname, "/auth/callback");
-      router.push(authCallbackURL);
+      const origin = window.location.origin;
+      router.push(`${origin}/auth/callback?code=${code}`);
     }
   }, [searchParams, supabase, router]);
   const heroStats = [

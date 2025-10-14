@@ -54,6 +54,9 @@ export default function SignupCard() {
     }
   };
 
+  // Ensure URL doesn't have trailing slash to avoid duplication
+  const redirectTo = getRedirectURL().replace(/\/$/, '');
+
   const [passwordValidation, setPasswordValidation] = useState({
     minLength: false,
     hasUppercase: false,
@@ -114,7 +117,7 @@ export default function SignupCard() {
             full_name: formData.name,
             user_avatar: DEFAULT_AVATAR,
           },
-          emailRedirectTo: getRedirectURL(),
+          emailRedirectTo: redirectTo,
         },
       });
 

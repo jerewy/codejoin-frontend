@@ -77,8 +77,8 @@ export default function AuthCallbackPage() {
             console.log("OAuth session established successfully");
             // Add a small delay to ensure auth state is properly set across the app
             setTimeout(() => {
-              router.push(getRedirectURL());
-            }, 200);
+              router.push("/dashboard");
+            }, 100);
             return;
           }
         } else {
@@ -89,8 +89,8 @@ export default function AuthCallbackPage() {
           if (data.session) {
             console.log("Existing session found, redirecting to dashboard");
             setTimeout(() => {
-              router.push(getRedirectURL());
-            }, 200);
+              router.push("/dashboard");
+            }, 100);
             return;
           }
         }

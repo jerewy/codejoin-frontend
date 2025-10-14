@@ -28,10 +28,13 @@ export const LoginGoogle = () => {
       }
     };
 
+    // Ensure URL doesn't have trailing slash to avoid duplication
+    const redirectTo = getRedirectURL().replace(/\/$/, '');
+
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: getRedirectURL(),
+        redirectTo: redirectTo,
       },
     });
   };
