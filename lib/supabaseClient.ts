@@ -49,6 +49,14 @@ export function getSupabaseClient(): SupabaseClient | null {
           'X-Client-Info': 'codejoin-team-chat/1.0.0',
         },
       },
+      // Enable persistent storage for PKCE flow
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+        storageKey: 'supabase.auth.token',
+      },
     });
 
     // Set up connection monitoring

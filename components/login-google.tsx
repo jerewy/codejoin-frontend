@@ -12,6 +12,11 @@ export const LoginGoogle = () => {
     const getRedirectURL = () => {
       // Check if we're in the browser
       if (typeof window !== "undefined") {
+        // For local development, detect localhost
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+          return `http://localhost:3003/auth/callback`;
+        }
+        // For production, use the current origin
         return `${window.location.origin}/auth/callback`;
       }
 
@@ -24,7 +29,7 @@ export const LoginGoogle = () => {
       } else if (vercelURL) {
         return `https://${vercelURL}/auth/callback`;
       } else {
-        return "http://localhost:3000/auth/callback";
+        return "https://codejoin.vercel.app/auth/callback";
       }
     };
 
@@ -35,6 +40,10 @@ export const LoginGoogle = () => {
       provider: "google",
       options: {
         redirectTo: redirectTo,
+        // Use PKCE flow for enhanced security
+        flowType: 'pkce',
+        // Skip browser redirect to let Supabase handle it properly
+        skipBrowserRedirect: false,
       },
     });
   };

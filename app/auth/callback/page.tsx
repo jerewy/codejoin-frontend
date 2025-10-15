@@ -1,162 +1,115 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 
 export default function AuthCallbackPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const supabase = getSupabaseClient();
   const [isProcessing, setIsProcessing] = useState(false);
-  const processedCodeRef = useRef<string | null>(null);
-
-  // Helper function to get the correct redirect URL
-  const getRedirectURL = () => {
-    if (typeof window !== "undefined") {
-      return `${window.location.origin}/dashboard`;
-    }
-
-    const siteURL = process.env.NEXT_PUBLIC_SITE_URL;
-    const vercelURL = process.env.NEXT_PUBLIC_VERCEL_URL;
-
-    if (siteURL) {
-      return `${siteURL}/dashboard`;
-    } else if (vercelURL) {
-      return `https://${vercelURL}/dashboard`;
-    } else {
-      return "http://localhost:3000/dashboard";
-    }
-  };
+  const [message, setMessage] = useState("Processing authentication...");
 
   useEffect(() => {
     let isMounted = true;
 
     const handleAuthCallback = async () => {
-      if (!supabase || !isMounted) {
-        if (isMounted) router.push("/");
-        return;
-      }
+      if (!isMounted) return;
 
-      // Prevent multiple simultaneous callbacks
-      if (isProcessing) {
-        console.log("Already processing auth callback, skipping...");
-        return;
-      }
+      setIsProcessing(true);
+      setMessage("Verifying your account...");
 
-      // Check if there's a code parameter (OAuth callback)
-      const code = searchParams.get("code");
+      // Check for OAuth errors in URL
       const error = searchParams.get("error");
       const errorDescription = searchParams.get("error_description");
 
       // Handle OAuth errors
       if (error) {
         console.error("OAuth error:", error, errorDescription);
-        router.push(`/login?error=${encodeURIComponent(errorDescription || error)}`);
+        setMessage("Authentication failed. Redirecting...");
+        setTimeout(() => {
+          router.push(`/login?error=${encodeURIComponent(errorDescription || error)}`);
+        }, 2000);
         return;
       }
 
-      // Prevent processing the same code multiple times
-      if (code && processedCodeRef.current === code) {
-        console.log("Code already processed, skipping...");
-        return;
-      }
+      try {
+        // Give the middleware time to process the OAuth callback and set cookies
+        await new Promise(resolve => setTimeout(resolve, 1500));
 
-      if (code) {
-        console.log("Processing OAuth callback with code...");
-        processedCodeRef.current = code;
-        setIsProcessing(true);
+        if (!isMounted) return;
 
-        try {
-          // Exchange the code for a session
-          const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+        // Try to get the session using the browser client
+        const supabase = getSupabaseClient();
+        if (!supabase) {
+          setMessage("Authentication client unavailable. Redirecting...");
+          setTimeout(() => {
+            router.push("/login?error=Authentication client initialization failed");
+          }, 2000);
+          return;
+        }
 
-          if (!isMounted) return;
+        const { data, error: sessionError } = await supabase.auth.getSession();
 
-          if (exchangeError) {
-            console.error("Error exchanging code for session:", exchangeError);
+        if (!isMounted) return;
 
-            // Handle specific errors
-            if (exchangeError.message.includes("rate limit")) {
-              router.push("/login?error=Rate limit exceeded. Please try again in a few minutes.");
-            } else if (exchangeError.message.includes("code verifier")) {
-              router.push("/login?error=Authentication failed. Please try logging in again.");
-            } else {
-              router.push(`/login?error=${encodeURIComponent(exchangeError.message)}`);
-            }
-            return;
-          }
+        if (sessionError) {
+          console.error("Error getting session after callback:", sessionError);
+          setMessage("Session verification failed. Redirecting...");
+          setTimeout(() => {
+            router.push(`/login?error=${encodeURIComponent(sessionError.message)}`);
+          }, 2000);
+          return;
+        }
 
-          if (data.session) {
-            console.log("OAuth session established successfully", {
-              userId: data.session.user?.id,
-              email: data.session.user?.email
-            });
+        if (data.session) {
+          console.log("OAuth session established successfully", {
+            userId: data.session.user?.id,
+            email: data.session.user?.email
+          });
 
-            // Store session info for debugging
-            console.log("Session user:", data.session.user);
-            console.log("Session expires at:", data.session.expires_at);
-
-            // Use Next.js router instead of window.location.href to prevent full page reload
-            console.log("Redirecting to dashboard...");
+          setMessage("Authentication successful! Redirecting to dashboard...");
+          setTimeout(() => {
             router.push("/dashboard");
-            return;
-          }
-        } catch (err) {
-          if (!isMounted) return;
-          console.error("Unexpected error in auth callback:", err);
+          }, 1500);
+        } else {
+          console.log("No session found after OAuth callback");
+          setMessage("Authentication failed. Redirecting to login...");
+          setTimeout(() => {
+            router.push("/login?error=Authentication failed. Please try again.");
+          }, 2000);
+        }
+      } catch (err) {
+        if (!isMounted) return;
+        console.error("Unexpected error in auth callback:", err);
+        setMessage("An unexpected error occurred. Redirecting...");
+        setTimeout(() => {
           router.push("/login?error=An unexpected error occurred. Please try again.");
-        } finally {
-          if (isMounted) {
-            setIsProcessing(false);
-          }
+        }, 2000);
+      } finally {
+        if (isMounted) {
+          setIsProcessing(false);
         }
-      } else {
-        // No code parameter, just check existing session
-        console.log("No OAuth code, checking existing session...");
-
-        try {
-          const { data } = await supabase.auth.getSession();
-
-          if (!isMounted) return;
-
-          if (data.session) {
-            console.log("Existing session found, redirecting to dashboard", {
-              userId: data.session.user?.id,
-              email: data.session.user?.email
-            });
-
-            // Use Next.js router instead of window.location.href
-            console.log("Redirecting to dashboard from existing session...");
-            router.push("/dashboard");
-            return;
-          }
-        } catch (err) {
-          if (!isMounted) return;
-          console.error("Error checking existing session:", err);
-        }
-
-        // If we get here, authentication failed
-        console.log("Authentication failed - no session found");
-        router.push("/login?error=Authentication failed. Please try again.");
       }
     };
 
     handleAuthCallback();
 
-    // Cleanup function
     return () => {
       isMounted = false;
     };
-  }, [router, supabase, searchParams]); // Remove isProcessing from dependencies
+  }, [router, searchParams]);
 
   return (
     <div className="min-h-screen flex justify-center items-center">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-        <p className="text-muted-foreground text-sm">
-          {isProcessing ? "Verifying your account..." : "Processing authentication..."}
-        </p>
+      <div className="text-center space-y-4">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+        <div className="space-y-2">
+          <h1 className="text-xl font-semibold">Authentication in Progress</h1>
+          <p className="text-muted-foreground">
+            {message}
+          </p>
+        </div>
       </div>
     </div>
   );

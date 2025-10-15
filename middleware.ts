@@ -24,10 +24,27 @@ export async function middleware(request: NextRequest) {
           )
         },
       },
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+      },
     }
   )
 
-  // IMPORTANT: DO NOT REMOVE auth.refreshSession()
+  // Handle OAuth callback - let Supabase process it first
+  const { searchParams } = new URL(request.url)
+  const code = searchParams.get('code')
+  const error = searchParams.get('error')
+
+  // If this is an OAuth callback, let Supabase handle it before proceeding
+  if (code || error) {
+    // Don't interfere with OAuth callback processing
+    // Just ensure cookies are properly handled
+    return supabaseResponse
+  }
+
+  // IMPORTANT: DO NOT remove auth.refreshSession()
   // This will refresh the user's session and ensure they have the latest auth state
   const {
     data: { session },
