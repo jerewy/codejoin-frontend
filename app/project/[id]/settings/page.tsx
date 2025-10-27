@@ -23,12 +23,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
@@ -95,10 +90,8 @@ const formatDate = (value: string | null): string => {
   }
 };
 
-export default function ProjectSettingsPage({
-  params: paramsPromise,
-}: ProjectSettingsProps) {
-  const params = React.use(paramsPromise);
+export default function ProjectSettingsPage({ params }: ProjectSettingsProps) {
+  const resolvedParams = React.use(params);
   const supabase = getSupabaseClient();
   const { toast } = useToast();
 
@@ -130,13 +123,16 @@ export default function ProjectSettingsPage({
     }
   }, []);
 
-  const applyProjectState = useCallback((project: ProjectFormState) => {
-    setProjectForm(project);
-    setInitialProject(project);
-    setThumbnailPreview(project.thumbnail);
-    setThumbnailFile(null);
-    revokeThumbnailObjectUrl();
-  }, [revokeThumbnailObjectUrl]);
+  const applyProjectState = useCallback(
+    (project: ProjectFormState) => {
+      setProjectForm(project);
+      setInitialProject(project);
+      setThumbnailPreview(project.thumbnail);
+      setThumbnailFile(null);
+      revokeThumbnailObjectUrl();
+    },
+    [revokeThumbnailObjectUrl]
+  );
 
   const fetchProject = useCallback(async () => {
     if (!supabase) {
@@ -173,7 +169,7 @@ export default function ProjectSettingsPage({
         .select(
           "id, user_id, name, description, language, status, isStarred, tags, thumbnail, created_at, updated_at"
         )
-        .eq("id", params.id)
+        .eq("id", resolvedParams.id)
         .maybeSingle();
 
       if (projectError) {
@@ -204,8 +200,7 @@ export default function ProjectSettingsPage({
         name: typeof project.name === "string" ? project.name : "",
         description:
           typeof project.description === "string" ? project.description : "",
-        language:
-          typeof project.language === "string" ? project.language : "",
+        language: typeof project.language === "string" ? project.language : "",
         status:
           typeof project.status === "string" && project.status
             ? project.status
@@ -229,7 +224,7 @@ export default function ProjectSettingsPage({
     } finally {
       setIsLoadingProject(false);
     }
-  }, [applyProjectState, params.id, supabase]);
+  }, [applyProjectState, resolvedParams.id, supabase]);
 
   useEffect(() => {
     fetchProject();
@@ -366,7 +361,7 @@ export default function ProjectSettingsPage({
 
       // Validate file extension
       const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
-      const allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+      const allowedExtensions = ["jpg", "jpeg", "png", "gif", "webp"];
 
       if (!allowedExtensions.includes(extension)) {
         toast({
@@ -397,9 +392,11 @@ export default function ProjectSettingsPage({
     setThumbnailPreview(initialProject?.thumbnail ?? null);
 
     // Also reset the file input value to allow selecting the same file again
-    const fileInput = document.getElementById('project-thumbnail') as HTMLInputElement;
+    const fileInput = document.getElementById(
+      "project-thumbnail"
+    ) as HTMLInputElement;
     if (fileInput) {
-      fileInput.value = '';
+      fileInput.value = "";
     }
   }, [initialProject?.thumbnail, revokeThumbnailObjectUrl]);
 
@@ -420,7 +417,8 @@ export default function ProjectSettingsPage({
       thumbnail: initialProject.thumbnail,
     };
 
-    const formChanged = JSON.stringify(normalizedCurrent) !== JSON.stringify(normalizedInitial);
+    const formChanged =
+      JSON.stringify(normalizedCurrent) !== JSON.stringify(normalizedInitial);
 
     return formChanged || Boolean(thumbnailFile);
   }, [initialProject, projectForm, thumbnailFile]);
@@ -511,17 +509,21 @@ export default function ProjectSettingsPage({
       if (thumbnailFile) {
         setIsUploadingThumbnail(true);
         try {
-          const extension = thumbnailFile.name.split(".").pop()?.toLowerCase() ?? "png";
-          const allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+          const extension =
+            thumbnailFile.name.split(".").pop()?.toLowerCase() ?? "png";
+          const allowedExtensions = ["jpg", "jpeg", "png", "gif", "webp"];
 
           if (!allowedExtensions.includes(extension)) {
-            throw new Error(`Unsupported file format: ${extension}. Please use JPG, PNG, GIF, or WebP.`);
+            throw new Error(
+              `Unsupported file format: ${extension}. Please use JPG, PNG, GIF, or WebP.`
+            );
           }
 
-          uploadedFilePath = `project-thumbnails/${params.id}-${Date.now()}.${extension}`;
+          uploadedFilePath = `project-thumbnails/${
+            resolvedParams.id
+          }-${Date.now()}.${extension}`;
 
-          const { error: uploadError } = await supabase
-            .storage
+          const { error: uploadError } = await supabase.storage
             .from("assets")
             .upload(uploadedFilePath, thumbnailFile, {
               cacheControl: "3600",
@@ -531,11 +533,12 @@ export default function ProjectSettingsPage({
 
           if (uploadError) {
             console.error("Upload error:", uploadError);
-            throw new Error(`Failed to upload thumbnail: ${uploadError.message}`);
+            throw new Error(
+              `Failed to upload thumbnail: ${uploadError.message}`
+            );
           }
 
-          const { data: publicUrlData } = supabase
-            .storage
+          const { data: publicUrlData } = supabase.storage
             .from("assets")
             .getPublicUrl(uploadedFilePath);
 
@@ -559,7 +562,7 @@ export default function ProjectSettingsPage({
         language: projectForm.language?.trim() || null,
         status: projectForm.status,
         isStarred: projectForm.isStarred,
-        tags: projectForm.tags.filter(tag => tag.trim().length > 0),
+        tags: projectForm.tags.filter((tag) => tag.trim().length > 0),
         thumbnail: thumbnailUrl,
         updated_at: new Date().toISOString(),
       };
@@ -568,7 +571,7 @@ export default function ProjectSettingsPage({
       const { data: updatedProject, error: updateError } = await supabase
         .from("projects")
         .update(updatePayload)
-        .eq("id", params.id)
+        .eq("id", resolvedParams.id)
         .eq("user_id", user.id) // Ensure user owns the project
         .select(
           "name, description, language, status, isStarred, tags, thumbnail, updated_at"
@@ -592,17 +595,35 @@ export default function ProjectSettingsPage({
 
       // Update local state with server response
       const sanitizedTags = Array.isArray(updatedProject?.tags)
-        ? updatedProject.tags.filter((tag): tag is string => typeof tag === "string" && tag.trim().length > 0)
+        ? updatedProject.tags.filter(
+            (tag): tag is string =>
+              typeof tag === "string" && tag.trim().length > 0
+          )
         : [];
 
       const latestState: ProjectFormState = {
-        name: typeof updatedProject?.name === "string" ? updatedProject.name : trimmedName,
-        description: typeof updatedProject?.description === "string" ? updatedProject.description : null,
-        language: typeof updatedProject?.language === "string" ? updatedProject.language : null,
-        status: typeof updatedProject?.status === "string" ? updatedProject.status : "active",
+        name:
+          typeof updatedProject?.name === "string"
+            ? updatedProject.name
+            : trimmedName,
+        description:
+          typeof updatedProject?.description === "string"
+            ? updatedProject.description
+            : "",
+        language:
+          typeof updatedProject?.language === "string"
+            ? updatedProject.language
+            : "",
+        status:
+          typeof updatedProject?.status === "string"
+            ? updatedProject.status
+            : "active",
         isStarred: Boolean(updatedProject?.isStarred ?? false),
         tags: sanitizedTags,
-        thumbnail: typeof updatedProject?.thumbnail === "string" ? updatedProject.thumbnail : null,
+        thumbnail:
+          typeof updatedProject?.thumbnail === "string"
+            ? updatedProject.thumbnail
+            : null,
       };
 
       applyProjectState(latestState);
@@ -639,7 +660,7 @@ export default function ProjectSettingsPage({
   }, [
     applyProjectState,
     initialProject,
-    params.id,
+    resolvedParams.id,
     projectForm.name,
     projectForm.description,
     projectForm.language,
@@ -721,7 +742,11 @@ export default function ProjectSettingsPage({
             ) : (
               <Save className="mr-2 h-4 w-4" />
             )}
-            {isUploadingThumbnail ? "Uploading..." : isSaving ? "Saving..." : "Save changes"}
+            {isUploadingThumbnail
+              ? "Uploading..."
+              : isSaving
+              ? "Saving..."
+              : "Save changes"}
           </Button>
         </div>
       </header>
@@ -836,7 +861,10 @@ export default function ProjectSettingsPage({
 
                   <div className="flex items-start justify-between gap-4 rounded-lg border p-4">
                     <div className="space-y-1">
-                      <Label htmlFor="project-starred" className="flex items-center gap-2">
+                      <Label
+                        htmlFor="project-starred"
+                        className="flex items-center gap-2"
+                      >
                         <Star className="h-4 w-4 text-amber-500" />
                         Starred project
                       </Label>
@@ -888,7 +916,10 @@ export default function ProjectSettingsPage({
                         type="button"
                         variant="ghost"
                         onClick={handleResetThumbnail}
-                        disabled={fieldsDisabled || (!thumbnailFile && !thumbnailObjectUrlRef.current)}
+                        disabled={
+                          fieldsDisabled ||
+                          (!thumbnailFile && !thumbnailObjectUrlRef.current)
+                        }
                       >
                         Reset
                       </Button>
@@ -955,7 +986,8 @@ export default function ProjectSettingsPage({
                       </Button>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      {tagsRemaining} tag{tagsRemaining === 1 ? "" : "s"} remaining.
+                      {tagsRemaining} tag{tagsRemaining === 1 ? "" : "s"}{" "}
+                      remaining.
                     </p>
                   </div>
                 </CardContent>
@@ -970,7 +1002,7 @@ export default function ProjectSettingsPage({
                     <p className="text-sm font-medium text-muted-foreground">
                       Project ID
                     </p>
-                    <p className="font-mono text-sm">{params.id}</p>
+                    <p className="font-mono text-sm">{resolvedParams.id}</p>
                   </div>
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">

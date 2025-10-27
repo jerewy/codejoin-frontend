@@ -1,6 +1,6 @@
 // app/project/[id]/page.tsx
 
-import { createServerSupabase } from "@/lib/supabaseServer";
+import { createServerSupabase, getSupabaseServer, createTeamChatConversationWithFallback } from "@/lib/supabaseServer";
 import ProjectWorkspace from "@/components/project-workspace";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -22,13 +22,11 @@ export type ProjectNode = {
 };
 
 const extractMessageAuthorId = (
-  record:
-    | {
-        user_id?: string | null;
-        metadata?: Record<string, unknown> | null;
-        [key: string]: unknown;
-      }
-    | null
+  record: {
+    user_id?: string | null;
+    metadata?: Record<string, unknown> | null;
+    [key: string]: unknown;
+  } | null
 ) => {
   if (!record) {
     return null;
@@ -39,7 +37,10 @@ const extractMessageAuthorId = (
     return directId;
   }
 
-  const metadata = record.metadata as Record<string, unknown> | null | undefined;
+  const metadata = record.metadata as
+    | Record<string, unknown>
+    | null
+    | undefined;
   if (!metadata) {
     return null;
   }
@@ -64,20 +65,23 @@ const extractMessageAuthorId = (
 };
 
 export default async function ProjectPage({
-  params: paramsPromise,
+  params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
   // Create a Supabase client for this server component
   const supabase = await createServerSupabase();
   let collaborators: Collaborator[] = [];
-  const params = await paramsPromise;
+  const resolvedParams = await params;
 
   // Get current user
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
 
   if (userError) {
-    console.warn('Failed to get current user:', userError);
+    console.warn("Failed to get current user:", userError);
   }
 
   // Fetch data needed for the header
@@ -99,32 +103,43 @@ export default async function ProjectPage({
   let chatMessages: ProjectChatMessageWithAuthor[] = [];
 
   try {
-    const { data: projectData, error: projectError } = await supabase
+    // Use simple service role client for all database operations
+    const db = getSupabaseServer();
+
+    const { data: projectData, error: projectError } = await db
       .from("projects")
       .select("name")
-      .eq("id", params.id)
-      .single();
+      .eq("id", resolvedParams.id)
+      .maybeSingle();
 
     // Fetch the project's files and folders
-    const { data: nodesData, error: nodesError } = await supabase
+    const { data: nodesData, error: nodesError } = await db
       .from("project_nodes")
       .select("*")
-      .eq("project_id", params.id);
+      .eq("project_id", resolvedParams.id);
 
-    const { data: collaboratorsData, error: collaboratorsError } = await supabase
-      .from("collaborators")
-      .select("user_id, role")
-      .eq("project_id", params.id);
+    const { data: collaboratorsData, error: collaboratorsError } =
+      await db
+        .from("collaborators")
+        .select("user_id, role")
+        .eq("project_id", resolvedParams.id);
 
-    let profilesById = new Map<string, { full_name: string | null; user_avatar: string | null }>();
+    let profilesById = new Map<
+      string,
+      { full_name: string | null; user_avatar: string | null }
+    >();
 
-    if (!collaboratorsError && collaboratorsData && collaboratorsData.length > 0) {
+    if (
+      !collaboratorsError &&
+      collaboratorsData &&
+      collaboratorsData.length > 0
+    ) {
       const collaboratorIds = collaboratorsData
         .map((row) => row?.user_id)
         .filter((id): id is string => typeof id === "string" && id.length > 0);
 
       if (collaboratorIds.length > 0) {
-        const { data: profilesData, error: profilesError } = await supabase
+        const { data: profilesData, error: profilesError } = await db
           .from("profiles")
           .select("id, full_name, user_avatar")
           .in("id", collaboratorIds);
@@ -151,23 +166,25 @@ export default async function ProjectPage({
     if (collaboratorsError) {
       console.warn("Failed to load collaborators", collaboratorsError);
     } else if (collaboratorsData) {
-      collaborators = (collaboratorsData as CollaboratorRow[]).map(({ user_id, role }) => {
-        const profile = user_id ? profilesById.get(user_id) : undefined;
+      collaborators = (collaboratorsData as CollaboratorRow[]).map(
+        ({ user_id, role }) => {
+          const profile = user_id ? profilesById.get(user_id) : undefined;
 
-        return {
-          user_id,
-          role,
-          full_name: profile?.full_name ?? null,
-          user_avatar: profile?.user_avatar ?? null,
-        } satisfies Collaborator;
-      });
+          return {
+            user_id,
+            role,
+            full_name: profile?.full_name ?? null,
+            user_avatar: profile?.user_avatar ?? null,
+          } satisfies Collaborator;
+        }
+      );
     }
 
     // Try to get existing team chat conversation, or create one
-    const { data: conversationData, error: conversationError } = await supabase
+    const { data: conversationData, error: conversationError } = await db
       .from("conversations")
       .select("id")
-      .eq("project_id", params.id)
+      .eq("project_id", resolvedParams.id)
       .eq("type", "team-chat")
       .maybeSingle();
 
@@ -177,42 +194,57 @@ export default async function ProjectPage({
 
     if (conversationData?.id) {
       conversationId = conversationData.id;
-      console.log(`DEBUG: Found existing team chat conversation: ${conversationId}`);
+      console.log(
+        `DEBUG: Found existing team chat conversation: ${conversationId}`
+      );
     } else if (!conversationData) {
-      // Create a new team chat conversation using the database function
-      const { data: createdConversation, error: createConversationError } = await supabase
-        .rpc('ensure_team_chat_conversation', {
-          project_uuid: params.id,
-          user_uuid: user?.id
-        });
+      // Create a new team chat conversation using our fallback method
+      console.log("Creating team chat conversation with fallback method");
+      const { conversationId: createdConversationId, error: createError } =
+        await createTeamChatConversationWithFallback(resolvedParams.id, user?.id);
 
-      if (createConversationError) {
-        console.warn("Failed to create team chat conversation", createConversationError);
-        // Fallback to manual creation
-        const { data: fallbackConversation, error: fallbackError } = await supabase
-          .from("conversations")
-          .insert({
-            project_id: params.id,
-            type: 'team-chat',
-            created_by: user?.id
-          })
-          .select("id")
-          .single();
+      if (!createError && createdConversationId) {
+        conversationId = createdConversationId;
+        console.log(
+          `DEBUG: Created team chat conversation: ${conversationId}`
+        );
+      } else {
+        console.warn(
+          "Failed to create team chat conversation with fallback",
+          createError
+        );
+        // Try direct creation as last resort
+        try {
+          const { data: directConversation, error: directError } =
+            await db
+              .from("conversations")
+              .insert({
+                project_id: resolvedParams.id,
+                type: "team-chat",
+                created_by: user?.id,
+              })
+              .select("id")
+              .single();
 
-        if (fallbackError) {
-          console.warn("Failed to create fallback team chat conversation", fallbackError);
-        } else if (fallbackConversation?.id) {
-          conversationId = fallbackConversation.id;
-          console.log(`DEBUG: Created fallback team chat conversation: ${conversationId}`);
+          if (!directError && directConversation?.id) {
+            conversationId = directConversation.id;
+            console.log(
+              `DEBUG: Created direct team chat conversation: ${conversationId}`
+            );
+          } else {
+            console.warn(
+              "Direct conversation creation also failed",
+              directError
+            );
+          }
+        } catch (directError) {
+          console.error("Direct conversation creation threw error:", directError);
         }
-      } else if (createdConversation) {
-        conversationId = createdConversation;
-        console.log(`DEBUG: Created new team chat conversation: ${conversationId}`);
       }
     }
 
     if (conversationId) {
-      const { data: messagesData, error: messagesError } = await supabase
+      const { data: messagesData, error: messagesError } = await db
         .from("messages")
         .select("*")
         .eq("conversation_id", conversationId)
@@ -246,13 +278,17 @@ export default async function ProjectPage({
         );
 
         if (missingProfileIds.length > 0) {
-          const { data: extraProfiles, error: extraProfilesError } = await supabase
-            .from("profiles")
-            .select("id, full_name, user_avatar")
-            .in("id", missingProfileIds);
+          const { data: extraProfiles, error: extraProfilesError } =
+            await db
+              .from("profiles")
+              .select("id, full_name, user_avatar")
+              .in("id", missingProfileIds);
 
           if (extraProfilesError) {
-            console.warn("Failed to load message author profiles", extraProfilesError);
+            console.warn(
+              "Failed to load message author profiles",
+              extraProfilesError
+            );
           } else if (extraProfiles) {
             for (const profile of extraProfiles as ProfileRow[]) {
               profilesById.set(profile.id, {
@@ -290,35 +326,35 @@ export default async function ProjectPage({
         nodesError,
       });
 
-      project = { name: params.id ?? "Project" };
+      project = { name: resolvedParams.id ?? "Project" };
       nodes = [
         {
           id: "1",
-          project_id: params.id,
+          project_id: resolvedParams.id,
           name: "index.html",
           type: "file",
           content: `<!DOCTYPE html>\n<html lang="en">\n<head>\n    <meta charset="UTF-8">\n    <meta name="viewport" content="width=device-width, initial-scale=1.0">\n    <title>Welcome to CodeJoin</title>\n</head>\n<body>\n    <h1>Hello, World!</h1>\n    <p>Welcome to your CodeJoin project!</p>\n</body>\n</html>`,
           language: "html",
-          parent_id: null
+          parent_id: null,
         },
         {
           id: "2",
-          project_id: params.id,
+          project_id: resolvedParams.id,
           name: "script.js",
           type: "file",
           content: `console.log("Hello from CodeJoin!");`,
           language: "javascript",
-          parent_id: null
+          parent_id: null,
         },
         {
           id: "3",
-          project_id: params.id,
+          project_id: resolvedParams.id,
           name: "style.css",
           type: "file",
           content: `body {\n    font-family: Arial, sans-serif;\n    margin: 0;\n    padding: 20px;\n    background-color: #f5f5f5;\n}\n\nh1 {\n    color: #333;\n}`,
           language: "css",
-          parent_id: null
-        }
+          parent_id: null,
+        },
       ];
       conversationId = null;
       chatMessages = [];
@@ -327,26 +363,26 @@ export default async function ProjectPage({
     console.error("Supabase error:", error);
 
     // Provide mock data as fallback
-    project = { name: params.id ?? "Project" };
+    project = { name: resolvedParams.id ?? "Project" };
     nodes = [
       {
         id: "1",
-        project_id: params.id,
+        project_id: resolvedParams.id,
         name: "index.html",
         type: "file",
         content: `<!DOCTYPE html>\n<html lang="en">\n<head>\n    <meta charset="UTF-8">\n    <meta name="viewport" content="width=device-width, initial-scale=1.0">\n    <title>Welcome to CodeJoin</title>\n</head>\n<body>\n    <h1>Hello, World!</h1>\n    <p>Welcome to your CodeJoin project!</p>\n</body>\n</html>`,
         language: "html",
-        parent_id: null
+        parent_id: null,
       },
       {
         id: "2",
-        project_id: params.id,
+        project_id: resolvedParams.id,
         name: "script.js",
         type: "file",
         content: `console.log("Hello from CodeJoin!");`,
         language: "javascript",
-        parent_id: null
-      }
+        parent_id: null,
+      },
     ];
     conversationId = null;
     chatMessages = [];
@@ -355,7 +391,7 @@ export default async function ProjectPage({
   const projectName =
     typeof project?.name === "string" && project.name.trim().length > 0
       ? project.name
-      : params.id ?? "Project";
+      : resolvedParams.id ?? "Project";
 
   return (
     <div className="h-screen flex flex-col overflow-hidden">
@@ -377,7 +413,7 @@ export default async function ProjectPage({
           </div>
         </div>
         <ProjectActions
-          projectId={params.id}
+          projectId={resolvedParams.id}
           projectName={projectName}
           files={nodes}
         />
@@ -385,7 +421,7 @@ export default async function ProjectPage({
       <main className="flex-1 min-h-0 overflow-hidden">
         <ProjectWorkspace
           initialNodes={nodes}
-          projectId={params.id}
+          projectId={resolvedParams.id}
           conversationId={conversationId}
           initialChatMessages={chatMessages}
           teamMembers={collaborators}

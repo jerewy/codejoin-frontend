@@ -57,8 +57,13 @@ node_modules/
 # OS specific
 .DS_Store
 
-# Task files
-# tasks.json
-# tasks/ 
-
 .claude/
+
+# Task files
+tasks.json
+tasks/ 
+
+.cursor/
+.kilocode/
+.taskmaster/
+.vscode/

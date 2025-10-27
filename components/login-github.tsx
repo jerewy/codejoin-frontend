@@ -13,8 +13,11 @@ export const LoginGithub = () => {
       // Check if we're in the browser
       if (typeof window !== "undefined") {
         // For local development, detect localhost
-        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-          return `http://localhost:3003/auth/callback`;
+        if (
+          window.location.hostname === "localhost" ||
+          window.location.hostname === "127.0.0.1"
+        ) {
+          return `http://localhost:3000/auth/callback`;
         }
         // For production, use the current origin
         return `${window.location.origin}/auth/callback`;
@@ -34,14 +37,14 @@ export const LoginGithub = () => {
     };
 
     // Ensure URL doesn't have trailing slash to avoid duplication
-    const redirectTo = getRedirectURL().replace(/\/$/, '');
+    const redirectTo = getRedirectURL().replace(/\/$/, "");
 
     await supabase.auth.signInWithOAuth({
       provider: "github",
       options: {
         redirectTo: redirectTo,
         // Use PKCE flow for enhanced security
-        flowType: 'pkce',
+        flowType: "pkce",
         // Skip browser redirect to let Supabase handle it properly
         skipBrowserRedirect: false,
       },
