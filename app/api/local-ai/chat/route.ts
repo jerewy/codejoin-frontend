@@ -1,5 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 
+const buildContextPayload = (
+  context: unknown,
+  extras: Record<string, unknown>
+) => {
+  if (context && typeof context === "object" && !Array.isArray(context)) {
+    return { ...(context as Record<string, unknown>), ...extras };
+  }
+
+  if (typeof context === "string" && context.trim().length > 0) {
+    return { summary: context, ...extras };
+  }
+
+  return { ...extras };
+};
+
 // POST /api/local-ai/chat - Local AI chat endpoint
 export async function POST(request: NextRequest) {
   const requestId = `local_${Date.now()}_${Math.random()
@@ -20,6 +35,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const contextPayload = buildContextPayload(context, {
+      conversationId,
+      projectId,
+      requestId,
+      timestamp: new Date().toISOString(),
+      useLocalModel: true,
+    });
+
     // Try backend local AI service
     try {
       const backendUrl =
@@ -36,14 +59,7 @@ export async function POST(request: NextRequest) {
         },
         body: JSON.stringify({
           message,
-          context: {
-            ...context,
-            conversationId,
-            projectId,
-            requestId,
-            timestamp: new Date().toISOString(),
-            useLocalModel: true,
-          },
+          context: contextPayload,
         }),
       });
 
@@ -117,19 +133,27 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Return the actual error instead of masking with fallback
-      return NextResponse.json(
-        {
-          success: false,
-          error: errorMessage,
-          errorType,
+      const fallbackResponse = generateLocalAIResponse(message);
+
+      return NextResponse.json({
+        success: true,
+        response: fallbackResponse,
+        metadata: {
+          model: "offline-fallback",
+          provider: "local-fallback",
+          tokensUsed: 0,
+          responseTime: Date.now() - startTime,
           requestId,
-          processingTime: Date.now() - startTime,
-          backend: true,
+          backend: false,
           local: true,
+          fallback: true,
+          backendError: errorMessage,
+          errorType,
+          statusCode,
         },
-        { status: statusCode }
-      );
+        warning:
+          "Backend local AI service unavailable. Returned offline fallback response.",
+      });
     }
   } catch (error) {
     console.error(`Error in local AI chat POST: ${requestId}`, error);

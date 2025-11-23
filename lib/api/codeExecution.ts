@@ -36,12 +36,26 @@ class CodeExecutionAPI {
   private apiKey: string;
   private timeout: number;
 
-  constructor(
-    baseURL = "https://codejoin-backend.onrender.com",
-    apiKey = "test123",
-    timeout = 30000
-  ) {
-    this.baseURL = baseURL;
+  constructor(baseURL?: string, apiKey = "test123", timeout = 30000) {
+    let urlToUse = baseURL; // 1. Create a local variable
+
+    // 2. Perform logic on the local variable
+    if (!urlToUse) {
+      if (typeof window !== "undefined") {
+        urlToUse =
+          (window as any).__ENV?.NEXT_PUBLIC_API_URL ||
+          (window as any).NEXT_PUBLIC_API_URL ||
+          "http://localhost:3001";
+      } else {
+        urlToUse =
+          process.env.NEXT_PUBLIC_API_URL ||
+          process.env.BACKEND_URL ||
+          "http://localhost:3001";
+      }
+    }
+
+    // 3. Assign with a final fallback to guarantee 'string' type
+    this.baseURL = urlToUse || "http://localhost:3001";
     this.apiKey = apiKey;
     this.timeout = timeout;
   }
@@ -116,15 +130,67 @@ class CodeExecutionAPI {
 
   async executeCode(request: ExecuteCodeRequest): Promise<ExecuteCodeResponse> {
     try {
-      const response = await this.makeRequest<ExecuteCodeResponse>(
-        "/api/execute",
-        {
-          method: "POST",
-          body: JSON.stringify(request),
-        }
-      );
+      // First, start the execution
+      const startResponse = await this.makeRequest<{
+        executionId: string;
+        status: string;
+        message: string;
+      }>("/api/execute", {
+        method: "POST",
+        body: JSON.stringify(request),
+      });
 
-      return response;
+      if (!startResponse.executionId) {
+        throw new Error("No execution ID received from backend");
+      }
+
+      // Poll for completion
+      let attempts = 0;
+      const maxAttempts = 30; // 30 seconds max with 1-second intervals
+
+      while (attempts < maxAttempts) {
+        const statusResponse = await this.makeRequest<{
+          id: string;
+          status: string;
+          output?: string;
+          error?: string;
+          startTime: string;
+          endTime?: string;
+        }>(`/api/status/${startResponse.executionId}`);
+
+        if (statusResponse.status === "completed") {
+          return {
+            success: true,
+            language: request.language,
+            output: statusResponse.output || "",
+            error: statusResponse.error || "",
+            exitCode: statusResponse.error ? 1 : 0,
+            executionTime: statusResponse.endTime
+              ? new Date(statusResponse.endTime).getTime() -
+                new Date(statusResponse.startTime).getTime()
+              : 0,
+            timestamp: statusResponse.startTime,
+          };
+        }
+
+        if (statusResponse.status === "failed") {
+          return {
+            success: false,
+            language: request.language,
+            output: "",
+            error: statusResponse.error || "Execution failed",
+            exitCode: 1,
+            executionTime: 0,
+            timestamp: statusResponse.startTime,
+          };
+        }
+
+        // Still running, wait and poll again
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        attempts++;
+      }
+
+      throw new Error("Execution timeout");
     } catch (error) {
       // Return a properly formatted error response
       return {

@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, {
+  useEffect,
+  useState,
+  useRef,
+  useCallback,
+  useMemo,
+} from "react";
 import { useSocket, useFileCollaboration } from "@/lib/socket";
 import { useDockerConnection } from "@/lib/docker-connection-manager";
 import { useAIConversations } from "@/hooks/use-ai-conversations";
@@ -73,6 +79,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Switch } from "@/components/ui/switch";
 import {
   Select,
@@ -96,6 +104,7 @@ import type {
   ProjectNodeFromDB,
 } from "@/lib/types";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 
 // Define execution result interface
 interface ExecutionResult {
@@ -283,7 +292,7 @@ function TerminalPanel({
     status: dockerStatus,
     canAttemptConnection,
     reportConnectionFailure,
-    reportConnectionSuccess
+    reportConnectionSuccess,
   } = useDockerConnection();
   const { toast } = useToast();
 
@@ -691,21 +700,32 @@ function TerminalPanel({
       // Check Docker connection availability before attempting to start session
       if (!canAttemptConnection()) {
         if (dockerStatus.isRateLimited) {
-          appendStatusLine(`Docker connection rate limited. Please wait before retrying.`);
+          appendStatusLine(
+            `Docker connection rate limited. Please wait before retrying.`
+          );
           toast({
             title: "Docker Connection Rate Limited",
-            description: dockerStatus.errorMessage || "Too many failed attempts. Please wait before retrying.",
+            description:
+              dockerStatus.errorMessage ||
+              "Too many failed attempts. Please wait before retrying.",
             variant: "destructive",
           });
         } else if (dockerStatus.consecutiveFailures >= 3) {
-          appendStatusLine(`Docker connection failed too many times. Please check Docker and try again later.`);
+          appendStatusLine(
+            `Docker connection failed too many times. Please check Docker and try again later.`
+          );
           toast({
             title: "Docker Unavailable",
-            description: "Docker connection has failed multiple times. Please ensure Docker Desktop is running and retry.",
+            description:
+              "Docker connection has failed multiple times. Please ensure Docker Desktop is running and retry.",
             variant: "destructive",
           });
         } else {
-          appendStatusLine(`Docker connection unavailable: ${dockerStatus.errorMessage || 'Unknown error'}`);
+          appendStatusLine(
+            `Docker connection unavailable: ${
+              dockerStatus.errorMessage || "Unknown error"
+            }`
+          );
         }
         return;
       }
@@ -902,9 +922,10 @@ function TerminalPanel({
       }
 
       // Check if this is a Docker-related error
-      const isDockerError = message.toLowerCase().includes('docker') ||
-                           message.toLowerCase().includes('container') ||
-                           message.toLowerCase().includes('unavailable');
+      const isDockerError =
+        message.toLowerCase().includes("docker") ||
+        message.toLowerCase().includes("container") ||
+        message.toLowerCase().includes("unavailable");
 
       if (isDockerError) {
         reportConnectionFailure(message);
@@ -1720,13 +1741,13 @@ export default function ProjectWorkspace({
     setIsUserAuthenticated(isAuthenticated);
 
     // Debug authentication state
-    console.log('Authentication state:', {
+    console.log("Authentication state:", {
       userLoading,
       hasUserId: !!user?.id,
       hasUserEmail: !!user?.email,
       isAuthenticated,
       userId: user?.id,
-      userEmail: user?.email
+      userEmail: user?.email,
     });
   }, [user, userLoading]);
 
@@ -1740,7 +1761,35 @@ export default function ProjectWorkspace({
   const [isAIVoiceActive, setIsAIVoiceActive] = useState(false);
   const [aiMessage, setAiMessage] = useState("");
   const [isAIThinking, setIsAIThinking] = useState(false);
-  const [selectedAIModel, setSelectedAIModel] = useState<string>("hybrid-smart");
+  const aiModelOptions = useMemo<AIModelConfig[]>(
+    () => [
+      {
+        id: "fast",
+        name: "Fast (8B)",
+        provider: "cloud",
+        endpoint: "/api/ai/chat",
+        model: "llama-3.1-8b-instant",
+        description: "Quick responses for routine help and short fixes.",
+        capabilities: ["code-generation", "debugging", "quick-replies"],
+        maxTokens: 2048,
+        contextWindow: 8192,
+      },
+      {
+        id: "smart",
+        name: "Smart (70B)",
+        provider: "cloud",
+        endpoint: "/api/ai/chat",
+        model: "llama-3.3-70b-versatile",
+        description: "Better reasoning for complex tasks, slower/higher cost.",
+        capabilities: ["reasoning", "architecture", "debugging", "code-review"],
+        maxTokens: 2048,
+        contextWindow: 8192,
+      },
+    ],
+    []
+  );
+
+  const [selectedAIModel, setSelectedAIModel] = useState<string>("fast");
 
   // Rate limit tracking
   const [rateLimitInfo, setRateLimitInfo] = useState<{
@@ -1750,7 +1799,7 @@ export default function ProjectWorkspace({
     resetTime?: Date;
   }>({
     isRateLimited: false,
-    retryAfter: 0
+    retryAfter: 0,
   });
 
   // AI Conversation hook for Supabase-backed persistence
@@ -2543,15 +2592,21 @@ export default function ProjectWorkspace({
     if (!aiMessage.trim()) return;
 
     if (!isUserAuthenticated) {
+      console.warn("AI send continuing without auth (falling back to local conversation)");
       toast({
-        title: "Authentication Required",
-        description: "Please sign in to send messages to the AI Assistant.",
-        variant: "destructive",
+        title: "Working offline",
+        description: "Not authenticated — using local conversation fallback.",
+        variant: "default",
       });
-      return;
     }
 
     const userMessage = aiMessage.trim();
+    console.log("AI send start", {
+      selectedAIModel,
+      messageLength: userMessage.length,
+      isAIThinking,
+      isRateLimited: rateLimitInfo.isRateLimited,
+    });
     setAiMessage("");
     setIsAIThinking(true); // Start thinking animation
 
@@ -2560,20 +2615,33 @@ export default function ProjectWorkspace({
       let conversation = currentConversation;
       if (!conversation) {
         conversation = await getOrCreateConversation("AI Chat");
-        if (!conversation) {
-          toast({
-            title: "Error",
-            description: "Failed to create conversation",
-            variant: "destructive",
-          });
-          setIsAIThinking(false);
-          return;
-        }
       }
+
+      // Fallback to a local conversation if creation failed (keeps chat usable)
+      if (!conversation) {
+        const now = new Date().toISOString();
+        conversation = {
+          id: `local_${Date.now()}`,
+          project_id: projectId ?? "local",
+          title: "AI Chat",
+          created_by: user?.id ?? null,
+          created_at: now,
+          updated_at: now,
+          type: "ai-chat",
+          metadata: {},
+        } as any;
+      }
+
+      // Bail if still no conversation (should not happen, but keeps type-check happy)
+      if (!conversation) {
+        setIsAIThinking(false);
+        return;
+      }
+      const convo = conversation;
 
       // Add user message to database
       try {
-        await addMessage(conversation.id, {
+        await addMessage(convo.id, {
           role: "user",
           content: userMessage,
           metadata: {},
@@ -2585,25 +2653,29 @@ export default function ProjectWorkspace({
       }
 
       // Get code context from current file
-      const context = currentFile
-        ? `Current file: ${currentFile.name}\nLanguage: ${
-            currentFile.language || "unknown"
-          }\n\n${currentFile.content?.substring(0, 2000) || ""}`
-        : "No file selected";
+      const fileSnippet =
+        currentFile?.content && currentFile.content.trim().length > 0
+          ? currentFile.content.slice(0, 800)
+          : null;
+      const context =
+        fileSnippet && currentFile
+          ? `Current file: ${currentFile.name}\nLanguage: ${
+              currentFile.language || "unknown"
+            }\n\n${fileSnippet}`
+          : null;
 
-      // Determine which API endpoint to use based on selected model
-      let endpoint = '/api/ai/chat'; // Default cloud endpoint
-      if (selectedAIModel === 'deepseek-coder-6.7b') {
-        endpoint = '/api/local-ai/chat';
-      } else if (selectedAIModel === 'qwen-coder-free') {
-        endpoint = '/api/openrouter-ai/chat';
-      } else if (selectedAIModel === 'hybrid-smart') {
-        // Use default cloud endpoint for hybrid mode (it will handle routing)
-        endpoint = '/api/ai/chat';
-      }
+      const modelForApi = selectedAIModel === "smart" ? "smart" : undefined;
+      const endpoint = "/api/ai/chat";
 
       // Call the AI backend API
       const startTime = Date.now();
+      console.log("AI calling endpoint", {
+        endpoint,
+        modelForApi,
+        selectedAIModel,
+        conversationId: convo.id,
+        projectId,
+      });
       const response = await fetch(endpoint, {
         method: "POST",
         headers: {
@@ -2613,12 +2685,13 @@ export default function ProjectWorkspace({
         body: JSON.stringify({
           message: userMessage,
           context: {
-            fileContext: context,
+            ...(context ? { fileContext: context } : {}),
             selectedModel: selectedAIModel,
-            projectId: project?.id,
-            conversationId: conversation.id,
-            timestamp: new Date().toISOString()
+            projectId,
+            conversationId: convo.id,
+            timestamp: new Date().toISOString(),
           },
+          ...(modelForApi ? { model: modelForApi } : {}),
         }),
       });
 
@@ -2632,7 +2705,7 @@ export default function ProjectWorkspace({
             isRateLimited: false,
             retryAfter: 0,
             errorType: undefined,
-            resetTime: undefined
+            resetTime: undefined,
           });
         }
 
@@ -2652,7 +2725,8 @@ export default function ProjectWorkspace({
           // Show error in toast if saving fails - the UI will rely on the response already shown
           toast({
             title: "Warning",
-            description: "AI response was received but couldn't be saved to conversation history.",
+            description:
+              "AI response was received but couldn't be saved to conversation history.",
             variant: "default",
           });
         }
@@ -2666,9 +2740,10 @@ export default function ProjectWorkspace({
 
         // Handle specific error types with user-friendly messages
         switch (data.errorType) {
-          case 'rate_limit':
+          case "rate_limit":
             errorTitle = "Rate Limit Exceeded";
-            userFriendlyMessage = "The AI service is temporarily busy. Please wait a moment before trying again.";
+            userFriendlyMessage =
+              "The AI service is temporarily busy. Please wait a moment before trying again.";
             shouldRetry = true;
             retryAfter = data.retryAfter || 60; // Default to 60 seconds if not provided
             // Set rate limit info for countdown timer
@@ -2676,13 +2751,14 @@ export default function ProjectWorkspace({
               isRateLimited: true,
               retryAfter,
               errorType: data.errorType,
-              resetTime: new Date(Date.now() + retryAfter * 1000)
+              resetTime: new Date(Date.now() + retryAfter * 1000),
             });
             break;
 
-          case 'quota_exceeded':
+          case "quota_exceeded":
             errorTitle = "API Quota Exceeded";
-            userFriendlyMessage = "The free AI service quota has been reached. You can try again later or switch to a different model.";
+            userFriendlyMessage =
+              "The free AI service quota has been reached. You can try again later or switch to a different model.";
             shouldRetry = true;
             retryAfter = data.retryAfter || 300; // Default to 5 minutes
             // Set rate limit info for countdown timer
@@ -2690,19 +2766,21 @@ export default function ProjectWorkspace({
               isRateLimited: true,
               retryAfter,
               errorType: data.errorType,
-              resetTime: new Date(Date.now() + retryAfter * 1000)
+              resetTime: new Date(Date.now() + retryAfter * 1000),
             });
             break;
 
-          case 'authentication':
+          case "authentication":
             errorTitle = "Authentication Error";
-            userFriendlyMessage = "There's an issue with the AI service configuration. Please try again or contact support.";
+            userFriendlyMessage =
+              "There's an issue with the AI service configuration. Please try again or contact support.";
             shouldRetry = false;
             break;
 
-          case 'credits_insufficient':
+          case "credits_insufficient":
             errorTitle = "Insufficient Credits";
-            userFriendlyMessage = "The AI service has run out of credits. Please try again later or switch to a different model.";
+            userFriendlyMessage =
+              "The AI service has run out of credits. Please try again later or switch to a different model.";
             shouldRetry = true;
             retryAfter = data.retryAfter || 300;
             // Set rate limit info for countdown timer
@@ -2710,13 +2788,14 @@ export default function ProjectWorkspace({
               isRateLimited: true,
               retryAfter,
               errorType: data.errorType,
-              resetTime: new Date(Date.now() + retryAfter * 1000)
+              resetTime: new Date(Date.now() + retryAfter * 1000),
             });
             break;
 
-          case 'service_unavailable':
+          case "service_unavailable":
             errorTitle = "Service Temporarily Unavailable";
-            userFriendlyMessage = "The AI service is temporarily down. Please try again in a few moments.";
+            userFriendlyMessage =
+              "The AI service is temporarily down. Please try again in a few moments.";
             shouldRetry = true;
             retryAfter = data.retryAfter || 30;
             // Set rate limit info for countdown timer
@@ -2724,30 +2803,34 @@ export default function ProjectWorkspace({
               isRateLimited: true,
               retryAfter,
               errorType: data.errorType,
-              resetTime: new Date(Date.now() + retryAfter * 1000)
+              resetTime: new Date(Date.now() + retryAfter * 1000),
             });
             break;
 
-          case 'model_not_found':
+          case "model_not_found":
             errorTitle = "Model Not Available";
-            userFriendlyMessage = "The selected AI model is not currently available. Please try a different model.";
+            userFriendlyMessage =
+              "The selected AI model is not currently available. Please try a different model.";
             shouldRetry = false;
             break;
 
           default:
             if (data.statusCode === 429) {
               errorTitle = "Too Many Requests";
-              userFriendlyMessage = "You're sending requests too quickly. Please wait a moment before trying again.";
+              userFriendlyMessage =
+                "You're sending requests too quickly. Please wait a moment before trying again.";
               shouldRetry = true;
               retryAfter = 60;
             } else if (data.statusCode >= 500) {
               errorTitle = "Service Error";
-              userFriendlyMessage = "The AI service is experiencing issues. Please try again in a few moments.";
+              userFriendlyMessage =
+                "The AI service is experiencing issues. Please try again in a few moments.";
               shouldRetry = true;
               retryAfter = 30;
             } else if (data.statusCode >= 400) {
               errorTitle = "Request Error";
-              userFriendlyMessage = "There was an issue with your request. Please try again or rephrase your message.";
+              userFriendlyMessage =
+                "There was an issue with your request. Please try again or rephrase your message.";
               shouldRetry = true;
               retryAfter = 10;
             }
@@ -2760,41 +2843,20 @@ export default function ProjectWorkspace({
           enhancedErrorMessage += `\n\nYou can try again in ${retryAfter} seconds.`;
         }
 
-        // Smart model switching suggestions based on current model and error type
-        const modelSuggestions = [];
-
-        if (selectedAIModel === 'qwen-coder-free') {
-          if (data.errorType === 'rate_limit' || data.errorType === 'quota_exceeded') {
-            modelSuggestions.push('"Gemini Pro" (Google AI)');
-            modelSuggestions.push('"Smart Hybrid Mode" (automatic fallback)');
-          } else if (data.errorType === 'service_unavailable') {
-            modelSuggestions.push('"Deepseek Coder" (local model)');
-            modelSuggestions.push('"Smart Hybrid Mode" (automatic fallback)');
-          }
-        } else if (selectedAIModel === 'gemini-pro') {
-          if (data.errorType === 'rate_limit' || data.errorType === 'quota_exceeded') {
-            modelSuggestions.push('"Qwen Coder Free" (OpenRouter)');
-            modelSuggestions.push('"Smart Hybrid Mode" (automatic fallback)');
-          } else if (data.errorType === 'service_unavailable') {
-            modelSuggestions.push('"Deepseek Coder" (local model)');
-            modelSuggestions.push('"Smart Hybrid Mode" (automatic fallback)');
-          }
-        } else if (selectedAIModel === 'deepseek-coder-6.7b') {
-          if (data.errorType === 'service_unavailable' || data.errorType === 'model_not_found') {
-            modelSuggestions.push('"Qwen Coder Free" (cloud model)');
-            modelSuggestions.push('"Gemini Pro" (Google AI)');
-            modelSuggestions.push('"Smart Hybrid Mode" (automatic fallback)');
-          }
-        } else if (selectedAIModel === 'hybrid-smart') {
-          if (data.errorType === 'rate_limit' || data.errorType === 'quota_exceeded') {
-            modelSuggestions.push('"Deepseek Coder" (local model - no rate limits)');
-          }
+        // Simple model switching suggestions for Groq fast/smart
+        const modelSuggestions: string[] = [];
+        if (selectedAIModel === "fast") {
+          modelSuggestions.push("Try Smart (70B) for harder problems.");
+        } else if (selectedAIModel === "smart") {
+          modelSuggestions.push(
+            "Try Fast (8B) if Smart is busy or rate-limited."
+          );
         }
 
         if (modelSuggestions.length > 0) {
-          enhancedErrorMessage += `\n\n🔄 Suggested alternatives:\n${modelSuggestions.map(suggestion => `• ${suggestion}`).join('\n')}`;
-        } else if (selectedAIModel !== 'hybrid-smart') {
-          enhancedErrorMessage += `\n\n💡 Tip: Try "Smart Hybrid Mode" for automatic fallback to available models.`;
+          enhancedErrorMessage += `\n\nSuggested alternatives:\n${modelSuggestions
+            .map((suggestion) => `• ${suggestion}`)
+            .join("\n")}`;
         }
 
         // Add enhanced error message to database
@@ -2803,12 +2865,12 @@ export default function ProjectWorkspace({
             role: "assistant",
             content: enhancedErrorMessage,
             metadata: {
-              type: 'error',
+              type: "error",
               errorType: data.errorType,
               statusCode: data.statusCode,
               shouldRetry,
               retryAfter,
-              originalError: errorMessage
+              originalError: errorMessage,
             },
             author_id: null,
           });
@@ -2823,8 +2885,11 @@ export default function ProjectWorkspace({
         }
 
         // Also show toast notification for immediate feedback with quick action
-        const shouldSuggestHybrid = selectedAIModel !== 'hybrid-smart' &&
-          (data.errorType === 'rate_limit' || data.errorType === 'quota_exceeded' || data.errorType === 'service_unavailable');
+        const shouldSuggestHybrid =
+          selectedAIModel !== "hybrid-smart" &&
+          (data.errorType === "rate_limit" ||
+            data.errorType === "quota_exceeded" ||
+            data.errorType === "service_unavailable");
 
         if (shouldSuggestHybrid) {
           toast({
@@ -2835,16 +2900,17 @@ export default function ProjectWorkspace({
                 size="sm"
                 variant="outline"
                 onClick={() => {
-                  setSelectedAIModel('hybrid-smart');
+                  setSelectedAIModel("smart");
                   toast({
                     title: "Model Switched",
-                    description: "Switched to Smart Hybrid Mode. It will automatically try alternative models if one fails.",
+                    description:
+                      "Switched to Smart (70B) for tougher requests.",
                     variant: "default",
                   });
                 }}
                 className="bg-primary text-primary-foreground hover:bg-primary/90"
               >
-                Switch to Hybrid
+                Switch to Smart
               </Button>
             ),
             variant: "destructive",
@@ -2866,8 +2932,9 @@ export default function ProjectWorkspace({
         if (conversation) {
           await addMessage(conversation.id, {
             role: "assistant",
-            content: "Error: Failed to connect to AI service. Please try again.",
-            metadata: { type: 'error' },
+            content:
+              "Error: Failed to connect to AI service. Please try again.",
+            metadata: { type: "error" },
             author_id: null,
           });
         }
@@ -3129,11 +3196,13 @@ export default function ProjectWorkspace({
     // Only scroll to bottom on new messages after initial load
     if (hasLoadedInitialMessages.current && aiMessages.length > 0) {
       const scrollContainer = chatScrollRef.current;
-      const isNearBottom = scrollContainer.scrollHeight - scrollContainer.scrollTop <= scrollContainer.clientHeight + 100;
+      const isNearBottom =
+        scrollContainer.scrollHeight - scrollContainer.scrollTop <=
+        scrollContainer.clientHeight + 100;
 
       // Only auto-scroll if user is already near bottom or it's a new user message
       const lastMessage = aiMessages[aiMessages.length - 1];
-      if (isNearBottom || lastMessage?.role === 'user') {
+      if (isNearBottom || lastMessage?.role === "user") {
         setTimeout(() => {
           scrollContainer.scrollTop = scrollContainer.scrollHeight;
         }, 100);
@@ -3157,7 +3226,7 @@ export default function ProjectWorkspace({
     }
 
     const timer = setInterval(() => {
-      setRateLimitInfo(prev => {
+      setRateLimitInfo((prev) => {
         const newRetryAfter = Math.max(0, prev.retryAfter - 1);
 
         // Reset rate limit when countdown reaches zero
@@ -3166,13 +3235,13 @@ export default function ProjectWorkspace({
             isRateLimited: false,
             retryAfter: 0,
             errorType: undefined,
-            resetTime: undefined
+            resetTime: undefined,
           };
         }
 
         return {
           ...prev,
-          retryAfter: newRetryAfter
+          retryAfter: newRetryAfter,
         };
       });
     }, 1000);
@@ -3462,7 +3531,7 @@ export default function ProjectWorkspace({
                   <TabsContent
                     value="terminal"
                     className="flex-1 overflow-hidden p-0 m-0 h-full"
-                    style={{ contain: 'strict' }}
+                    style={{ contain: "strict" }}
                   >
                     <TerminalPanel
                       projectId={projectId}
@@ -3479,7 +3548,7 @@ export default function ProjectWorkspace({
                   <TabsContent
                     value="problems"
                     className="flex-1 overflow-hidden p-0 m-0 h-full"
-                    style={{ contain: 'strict' }}
+                    style={{ contain: "strict" }}
                   >
                     <ProblemsPanel
                       problems={problems}
@@ -3491,60 +3560,63 @@ export default function ProjectWorkspace({
                     <TabsContent
                       value="ai"
                       className="flex-1 flex min-h-0 p-0 m-0 h-full"
-                      style={{ contain: 'strict' }}
+                      style={{ contain: "strict" }}
                     >
                       <div className="flex-1 flex flex-col h-full">
-                        {/* Chat Header with Model Selector and New Chat Button */}
-                        <div className="flex-shrink-0 border-b p-4 bg-muted/30">
-                          <div className="flex items-center justify-between mb-3">
+                        {/* Chat Header compact */}
+                        <div className="flex-shrink-0 border-b px-3 py-2 bg-muted/30">
+                          <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-2">
-                              <Brain className="h-5 w-5 text-primary" />
-                              <h3 className="text-sm font-medium">AI Assistant</h3>
+                              <Brain className="h-4 w-4 text-primary" />
+                              <h3 className="text-sm font-semibold">AI</h3>
                             </div>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                if (!isUserAuthenticated) {
-                                  toast({
-                                    title: "Authentication Required",
-                                    description: userLoading
-                                      ? "Please wait while we verify your authentication..."
-                                      : "Please sign in to create AI conversations.",
-                                    variant: "destructive",
-                                  });
-                                  return;
-                                }
-                                clearCurrentConversation();
-                                createConversation("New AI Chat");
-                              }}
-                              disabled={userLoading}
-                              className="h-8 px-3 text-xs"
-                            >
-                              <Plus className="h-3 w-3 mr-1" />
-                              {userLoading ? "Loading..." : "New Chat"}
-                            </Button>
-                          </div>
-
-                          {/* AI Model Selector */}
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <span>Model:</span>
+                            <div className="flex items-center gap-2">
+                              <AIModelSelector
+                                currentModel={selectedAIModel}
+                                onModelChange={setSelectedAIModel}
+                                models={aiModelOptions}
+                                compact={true}
+                                showStatus={false}
+                                className="text-xs"
+                              />
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  if (!isUserAuthenticated) {
+                                    toast({
+                                      title: "Authentication Required",
+                                      description: userLoading
+                                        ? "Please wait while we verify your authentication..."
+                                        : "Please sign in to create AI conversations.",
+                                      variant: "destructive",
+                                    });
+                                    return;
+                                  }
+                                  clearCurrentConversation();
+                                  createConversation("New AI Chat");
+                                }}
+                                disabled={userLoading}
+                                className="h-8 px-3 text-xs"
+                              >
+                                <Plus className="h-3 w-3 mr-1" />
+                                {userLoading ? "Loading..." : "New"}
+                              </Button>
                             </div>
-                            <AIModelSelector
-                              currentModel={selectedAIModel}
-                              onModelChange={setSelectedAIModel}
-                              compact={true}
-                              showStatus={true}
-                              className="text-xs"
-                            />
                           </div>
                         </div>
-                        <div ref={chatScrollRef} className="flex-1 overflow-auto">
-                            <div className="p-6 space-y-4">
-                              {(() => {
-                                const validMessages = aiMessages.filter(message => message.content && message.content.trim() !== '');
-                                return validMessages.length === 0 ? (
+                        <div
+                          ref={chatScrollRef}
+                          className="flex-1 overflow-auto"
+                        >
+                          <div className="p-6 space-y-4">
+                            {(() => {
+                              const validMessages = aiMessages.filter(
+                                (message) =>
+                                  message.content &&
+                                  message.content.trim() !== ""
+                              );
+                              return validMessages.length === 0 ? (
                                 <div className="text-center py-12">
                                   <div className="relative mb-6">
                                     <div className="w-16 h-16 mx-auto bg-gradient-to-r from-primary/20 to-primary/10 rounded-full flex items-center justify-center border border-primary/20">
@@ -3552,27 +3624,46 @@ export default function ProjectWorkspace({
                                     </div>
                                     <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-background"></div>
                                   </div>
-                                  <h3 className="text-lg font-semibold mb-2">AI Assistant</h3>
+                                  <h3 className="text-lg font-semibold mb-2">
+                                    AI Assistant
+                                  </h3>
                                   <p className="text-sm text-muted-foreground mb-6">
-                                    Your intelligent coding companion is ready to help!
+                                    Your intelligent coding companion is ready
+                                    to help!
                                   </p>
                                   <div className="max-w-md mx-auto">
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                                       <div className="p-3 rounded-lg bg-muted/50 border border-muted">
-                                        <div className="font-medium mb-1">💡 Code Analysis</div>
-                                        <div className="text-muted-foreground">Explain and optimize your code</div>
+                                        <div className="font-medium mb-1">
+                                          💡 Code Analysis
+                                        </div>
+                                        <div className="text-muted-foreground">
+                                          Explain and optimize your code
+                                        </div>
                                       </div>
                                       <div className="p-3 rounded-lg bg-muted/50 border border-muted">
-                                        <div className="font-medium mb-1">🐛 Debug Help</div>
-                                        <div className="text-muted-foreground">Find and fix bugs quickly</div>
+                                        <div className="font-medium mb-1">
+                                          🐛 Debug Help
+                                        </div>
+                                        <div className="text-muted-foreground">
+                                          Find and fix bugs quickly
+                                        </div>
                                       </div>
                                       <div className="p-3 rounded-lg bg-muted/50 border border-muted">
-                                        <div className="font-medium mb-1">⚡ Performance</div>
-                                        <div className="text-muted-foreground">Optimize for speed and efficiency</div>
+                                        <div className="font-medium mb-1">
+                                          ⚡ Performance
+                                        </div>
+                                        <div className="text-muted-foreground">
+                                          Optimize for speed and efficiency
+                                        </div>
                                       </div>
                                       <div className="p-3 rounded-lg bg-muted/50 border border-muted">
-                                        <div className="font-medium mb-1">📚 Learning</div>
-                                        <div className="text-muted-foreground">Get answers to programming questions</div>
+                                        <div className="font-medium mb-1">
+                                          📚 Learning
+                                        </div>
+                                        <div className="text-muted-foreground">
+                                          Get answers to programming questions
+                                        </div>
                                       </div>
                                     </div>
                                   </div>
@@ -3586,13 +3677,18 @@ export default function ProjectWorkspace({
                               ) : (
                                 validMessages.map((message, index) => (
                                   <div
-                                    key={message.id || `${message.role}-message-${index}`}
+                                    key={
+                                      message.id ||
+                                      `${message.role}-message-${index}`
+                                    }
                                     className={`flex gap-3 animate-in slide-in-from-bottom-2 duration-300 ${
                                       message.role === "user"
                                         ? "justify-end"
                                         : "justify-start"
                                     }`}
-                                    style={{ animationDelay: `${index * 50}ms` }}
+                                    style={{
+                                      animationDelay: `${index * 50}ms`,
+                                    }}
                                   >
                                     {message.role === "assistant" && (
                                       <div className="w-10 h-10 rounded-full bg-gradient-to-r from-primary/20 to-primary/10 flex items-center justify-center flex-shrink-0 border border-primary/20">
@@ -3608,10 +3704,104 @@ export default function ProjectWorkspace({
                                           : "bg-muted hover:bg-muted/80"
                                       }`}
                                     >
-                                      <div className="text-sm whitespace-pre-wrap leading-relaxed">
+                                      <ReactMarkdown
+                                        className="text-sm leading-relaxed break-words space-y-2"
+                                        remarkPlugins={[remarkGfm]}
+                                        components={{
+                                          code: (props: any) => {
+                                            const { inline, className, children, ...rest } = props;
+                                            if (inline) {
+                                              return (
+                                                <code
+                                                  className={`rounded bg-black/10 px-1 py-0.5 text-[0.85em] ${className || ""}`}
+                                                  {...rest}
+                                                >
+                                                  {children}
+                                                </code>
+                                              );
+                                            }
+                                            return (
+                                              <pre
+                                                className={`rounded bg-black/10 px-3 py-2 text-[0.85em] overflow-x-auto ${className || ""}`}
+                                                {...rest}
+                                              >
+                                                <code>{children}</code>
+                                              </pre>
+                                            );
+                                          },
+                                          a: (props: any) => {
+                                            const { className, ...rest } = props;
+                                            return (
+                                            <a
+                                              className={`underline font-medium ${
+                                                className || ""
+                                              }`}
+                                              target="_blank"
+                                              rel="noreferrer"
+                                              {...rest}
+                                            />
+                                          );
+                                          },
+                                          ul: (props: any) => {
+                                            const { className, ...rest } = props;
+                                            return (
+                                            <ul
+                                              className={`list-disc pl-5 space-y-1 ${
+                                                className || ""
+                                              }`}
+                                              {...rest}
+                                            />
+                                          );
+                                          },
+                                          ol: (props: any) => {
+                                            const { className, ...rest } = props;
+                                            return (
+                                            <ol
+                                              className={`list-decimal pl-5 space-y-1 ${
+                                                className || ""
+                                              }`}
+                                              {...rest}
+                                            />
+                                          );
+                                          },
+                                          p: (props: any) => {
+                                            const { className, ...rest } = props;
+                                            return (
+                                            <p
+                                              className={`leading-relaxed ${
+                                                className || ""
+                                              }`}
+                                              {...rest}
+                                            />
+                                          );
+                                          },
+                                          h3: (props: any) => {
+                                            const { className, ...rest } = props;
+                                            return (
+                                            <h3
+                                              className={`font-semibold text-sm mt-2 ${
+                                                className || ""
+                                              }`}
+                                              {...rest}
+                                            />
+                                          );
+                                          },
+                                          h4: (props: any) => {
+                                            const { className, ...rest } = props;
+                                            return (
+                                            <h4
+                                              className={`font-semibold text-sm mt-2 ${
+                                                className || ""
+                                              }`}
+                                              {...rest}
+                                            />
+                                          );
+                                          },
+                                        }}
+                                      >
                                         {message.content}
-                                      </div>
-                                      </div>
+                                      </ReactMarkdown>
+                                    </div>
                                     {message.role === "user" && (
                                       <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center flex-shrink-0 shadow-sm">
                                         <span className="text-primary-foreground text-sm font-medium">
@@ -3621,77 +3811,93 @@ export default function ProjectWorkspace({
                                     )}
                                   </div>
                                 ))
-                                )})()}
+                              );
+                            })()}
 
-                              {/* Enhanced Loading indicator */}
-                              {isAIThinking && (
-                                <div className="flex gap-3 justify-start">
-                                  <div className="w-10 h-10 rounded-full bg-gradient-to-r from-primary/20 to-primary/10 flex items-center justify-center flex-shrink-0 border border-primary/20">
-                                    <Brain className="h-5 w-5 text-primary animate-pulse" />
+                            {/* Enhanced Loading indicator */}
+                            {isAIThinking && (
+                              <div className="flex gap-3 justify-start">
+                                <div className="w-10 h-10 rounded-full bg-gradient-to-r from-primary/20 to-primary/10 flex items-center justify-center flex-shrink-0 border border-primary/20">
+                                  <Brain className="h-5 w-5 text-primary animate-pulse" />
+                                </div>
+                                <div className="max-w-[85%] rounded-lg px-4 py-3 bg-gradient-to-r from-primary/5 to-muted border border-primary/10 shadow-sm">
+                                  <div className="flex items-center gap-3">
+                                    <div className="flex gap-1">
+                                      <div className="w-2.5 h-2.5 bg-primary rounded-full animate-bounce" />
+                                      <div
+                                        className="w-2.5 h-2.5 bg-primary/70 rounded-full animate-bounce"
+                                        style={{ animationDelay: "0.1s" }}
+                                      />
+                                      <div
+                                        className="w-2.5 h-2.5 bg-primary/40 rounded-full animate-bounce"
+                                        style={{ animationDelay: "0.2s" }}
+                                      />
+                                    </div>
+                                    <span className="text-sm font-medium text-primary">
+                                      AI is thinking...
+                                    </span>
                                   </div>
-                                  <div className="max-w-[85%] rounded-lg px-4 py-3 bg-gradient-to-r from-primary/5 to-muted border border-primary/10 shadow-sm">
-                                    <div className="flex items-center gap-3">
-                                      <div className="flex gap-1">
-                                        <div className="w-2.5 h-2.5 bg-primary rounded-full animate-bounce" />
-                                        <div
-                                          className="w-2.5 h-2.5 bg-primary/70 rounded-full animate-bounce"
-                                          style={{ animationDelay: "0.1s" }}
-                                        />
-                                        <div
-                                          className="w-2.5 h-2.5 bg-primary/40 rounded-full animate-bounce"
-                                          style={{ animationDelay: "0.2s" }}
-                                        />
-                                      </div>
-                                      <span className="text-sm font-medium text-primary">
-                                        AI is thinking...
-                                      </span>
-                                    </div>
-                                    <div className="text-xs text-muted-foreground mt-1">
-                                      Analyzing your request and generating response
-                                    </div>
+                                  <div className="text-xs text-muted-foreground mt-1">
+                                    Analyzing your request and generating
+                                    response
                                   </div>
                                 </div>
-                              )}
-                            </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        <div className={`flex-shrink-0 border-t p-4 transition-colors ${
-                          isAIThinking ? 'bg-primary/5 border-primary/20' : 'bg-background'
-                        }`}>
+                        <div
+                          className={`flex-shrink-0 border-t p-4 transition-colors ${
+                            isAIThinking
+                              ? "bg-primary/5 border-primary/20"
+                              : "bg-background"
+                          }`}
+                        >
                           <div className="flex gap-2">
                             <div className="flex-1 relative">
-                              <Input
+                              <Textarea
                                 value={aiMessage}
                                 onChange={(e) => setAiMessage(e.target.value)}
+                                rows={2}
                                 placeholder={
                                   isAIThinking
                                     ? "AI is processing your request..."
                                     : rateLimitInfo.isRateLimited
-                                      ? `Rate limited. Try again in ${rateLimitInfo.retryAfter}s...`
-                                      : "Ask AI assistant..."
+                                    ? `Rate limited. Try again in ${rateLimitInfo.retryAfter}s...`
+                                    : "Ask AI assistant... (Shift+Enter for new line)"
                                 }
                                 onKeyDown={(e) => {
-                                  if (e.key === "Enter" && !e.shiftKey && !rateLimitInfo.isRateLimited) {
+                                  if (
+                                    e.key === "Enter" &&
+                                    !e.shiftKey &&
+                                    !rateLimitInfo.isRateLimited
+                                  ) {
                                     e.preventDefault();
                                     handleSendAIMessage();
                                   }
                                 }}
-                                disabled={isAIThinking || rateLimitInfo.isRateLimited}
+                                disabled={
+                                  isAIThinking || rateLimitInfo.isRateLimited
+                                }
                                 className={`pr-10 ${
                                   isAIThinking
-                                    ? 'bg-muted/50 border-primary/30'
+                                    ? "bg-muted/50 border-primary/30"
                                     : rateLimitInfo.isRateLimited
-                                      ? 'bg-orange-50 border-orange-200 text-orange-900 dark:bg-orange-950/20 dark:border-orange-800 dark:text-orange-200'
-                                      : ''
+                                    ? "bg-orange-50 border-orange-200 text-orange-900 dark:bg-orange-950/20 dark:border-orange-800 dark:text-orange-200"
+                                    : ""
                                 }`}
                               />
-                              {(isAIThinking || rateLimitInfo.isRateLimited) && (
+                              {(isAIThinking ||
+                                rateLimitInfo.isRateLimited) && (
                                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
                                   {isAIThinking ? (
                                     <RefreshCw className="h-4 w-4 animate-spin text-primary" />
                                   ) : (
                                     <div className="flex items-center gap-1 text-orange-600 dark:text-orange-400">
                                       <Timer className="h-4 w-4" />
-                                      <span className="text-xs font-mono">{rateLimitInfo.retryAfter}s</span>
+                                      <span className="text-xs font-mono">
+                                        {rateLimitInfo.retryAfter}s
+                                      </span>
                                     </div>
                                   )}
                                 </div>
@@ -3700,13 +3906,17 @@ export default function ProjectWorkspace({
                             <Button
                               onClick={handleSendAIMessage}
                               size="sm"
-                              disabled={!aiMessage.trim() || isAIThinking || rateLimitInfo.isRateLimited}
+                              disabled={
+                                !aiMessage.trim() ||
+                                isAIThinking ||
+                                rateLimitInfo.isRateLimited
+                              }
                               className={
                                 isAIThinking
-                                  ? 'bg-primary/20 border-primary/30 text-primary'
+                                  ? "bg-primary/20 border-primary/30 text-primary"
                                   : rateLimitInfo.isRateLimited
-                                    ? 'bg-orange-100 border-orange-200 text-orange-700 hover:bg-orange-200 dark:bg-orange-900/30 dark:border-orange-700 dark:text-orange-300'
-                                    : ''
+                                  ? "bg-orange-100 border-orange-200 text-orange-700 hover:bg-orange-200 dark:bg-orange-900/30 dark:border-orange-700 dark:text-orange-300"
+                                  : ""
                               }
                             >
                               {isAIThinking ? (
@@ -3729,7 +3939,8 @@ export default function ProjectWorkspace({
                                 <>
                                   <Timer className="h-3 w-3 text-orange-500" />
                                   <span className="text-orange-600 dark:text-orange-400">
-                                    Rate limited. You can send another message in {rateLimitInfo.retryAfter} seconds.
+                                    Rate limited. You can send another message
+                                    in {rateLimitInfo.retryAfter} seconds.
                                   </span>
                                 </>
                               )}
@@ -3802,3 +4013,6 @@ export default function ProjectWorkspace({
     </div>
   );
 }
+
+
+

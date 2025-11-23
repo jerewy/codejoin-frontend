@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +23,7 @@ export default function SimpleChat({ projectId, userId }: SimpleChatProps) {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [message, setMessage] = useState("");
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<"fast" | "smart">("fast");
 
   // Use the simple chat hook
   const {
@@ -106,7 +109,8 @@ export default function SimpleChat({ projectId, userId }: SimpleChatProps) {
     }
 
     setMessage("");
-    await sendMessage(trimmed);
+    const modelForApi = selectedModel === "smart" ? "smart" : undefined;
+    await sendMessage(trimmed, { model: modelForApi });
   };
 
   const handlePromptSelect = (prompt: string) => {
@@ -132,28 +136,53 @@ export default function SimpleChat({ projectId, userId }: SimpleChatProps) {
       {/* Header */}
       <div className="border-b bg-background/95 backdrop-blur-sm">
         <div className="max-w-4xl mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <Brain className="h-5 w-5 text-primary" />
-                <h1 className="text-lg font-semibold">{currentTitle}</h1>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <Brain className="h-5 w-5 text-primary" />
+                  <h1 className="text-lg font-semibold">{currentTitle}</h1>
+                </div>
+
+                {/* Message count badge */}
+                {messageCount > 0 && (
+                  <Badge variant="secondary" className="text-xs">
+                    {messageCount} messages
+                  </Badge>
+                )}
               </div>
 
-              {/* Message count badge */}
-              {messageCount > 0 && (
-                <Badge variant="secondary" className="text-xs">
-                  {messageCount} messages
-                </Badge>
-              )}
-            </div>
-
-            {/* Chat Controls */}
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleNewChat}
-              >
+              {/* Chat Controls */}
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <span className="hidden sm:inline">Model:</span>
+                  <div className="flex rounded-md border bg-muted/60 overflow-hidden">
+                    <Button
+                      type="button"
+                      variant={selectedModel === "fast" ? "secondary" : "ghost"}
+                      size="sm"
+                      className="h-8 px-3 text-xs rounded-none"
+                      onClick={() => setSelectedModel("fast")}
+                      disabled={isLoading}
+                    >
+                      Fast
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={selectedModel === "smart" ? "secondary" : "ghost"}
+                      size="sm"
+                      className="h-8 px-3 text-xs rounded-none border-l"
+                      onClick={() => setSelectedModel("smart")}
+                      disabled={isLoading}
+                    >
+                      Smart
+                    </Button>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleNewChat}
+                >
                 <RefreshCw className="h-4 w-4 mr-2" />
                 New Chat
               </Button>
@@ -208,7 +237,57 @@ export default function SimpleChat({ projectId, userId }: SimpleChatProps) {
                         : 'bg-muted'
                     }`}
                   >
-                    <div className="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</div>
+                    <ReactMarkdown
+                      className="text-sm leading-relaxed break-words space-y-2"
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        code: ({ inline, className, children, ...props }) => {
+                          if (inline) {
+                            return (
+                              <code
+                                className={`rounded bg-black/10 px-1 py-0.5 text-[0.85em] ${className || ""}`}
+                                {...props}
+                              >
+                                {children}
+                              </code>
+                            );
+                          }
+                          return (
+                            <pre
+                              className={`rounded bg-black/10 px-3 py-2 text-[0.85em] overflow-x-auto ${className || ""}`}
+                              {...props}
+                            >
+                              <code>{children}</code>
+                            </pre>
+                          );
+                        },
+                        a: ({ className, ...props }) => (
+                          <a
+                            className={`underline font-medium ${className || ""}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            {...props}
+                          />
+                        ),
+                        ul: ({ className, ...props }) => (
+                          <ul className={`list-disc pl-5 space-y-1 ${className || ""}`} {...props} />
+                        ),
+                        ol: ({ className, ...props }) => (
+                          <ol className={`list-decimal pl-5 space-y-1 ${className || ""}`} {...props} />
+                        ),
+                        p: ({ className, ...props }) => (
+                          <p className={`leading-relaxed ${className || ""}`} {...props} />
+                        ),
+                        h3: ({ className, ...props }) => (
+                          <h3 className={`font-semibold text-sm mt-2 ${className || ""}`} {...props} />
+                        ),
+                        h4: ({ className, ...props }) => (
+                          <h4 className={`font-semibold text-sm mt-2 ${className || ""}`} {...props} />
+                        ),
+                      }}
+                    >
+                      {msg.content}
+                    </ReactMarkdown>
                     {msg.metadata && (
                       <div className="text-xs opacity-70 mt-1">
                         {msg.metadata.model && (

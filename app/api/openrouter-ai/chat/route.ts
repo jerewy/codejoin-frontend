@@ -1,5 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 
+const buildContextPayload = (
+  context: unknown,
+  extras: Record<string, unknown>
+) => {
+  if (context && typeof context === "object" && !Array.isArray(context)) {
+    return { ...(context as Record<string, unknown>), ...extras };
+  }
+
+  if (typeof context === "string" && context.trim().length > 0) {
+    return { summary: context, ...extras };
+  }
+
+  return { ...extras };
+};
+
 // POST /api/openrouter-ai/chat - OpenRouter AI chat endpoint
 export async function POST(request: NextRequest) {
   const requestId = `req_${Date.now()}_${Math.random()
@@ -11,7 +26,7 @@ export async function POST(request: NextRequest) {
     console.log(`OpenRouter AI chat request started: ${requestId}`);
 
     const body = await request.json();
-    const { message, context, conversationId, projectId } = body;
+    const { message, context, conversationId, projectId, model } = body;
 
     if (!message) {
       return NextResponse.json(
@@ -19,6 +34,20 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    const contextPayload = buildContextPayload(context, {
+      conversationId,
+      projectId,
+      requestId,
+      timestamp: new Date().toISOString(),
+    });
+
+    const requestedModel =
+      (typeof model === "string" && model.trim().length > 0
+        ? model.trim()
+        : typeof (contextPayload as any)?.selectedModel === "string"
+        ? (contextPayload as any).selectedModel
+        : null) || "qwen/qwen3-235b-a22b:free";
 
     // Call the backend OpenRouter API
     try {
@@ -38,13 +67,8 @@ export async function POST(request: NextRequest) {
         },
         body: JSON.stringify({
           message,
-          context: {
-            ...context,
-            conversationId,
-            projectId,
-            requestId,
-            timestamp: new Date().toISOString(),
-          },
+          context: contextPayload,
+          model: requestedModel,
         }),
       });
 
@@ -89,21 +113,105 @@ export async function POST(request: NextRequest) {
     } catch (backendError) {
       console.error("OpenRouter backend API error:", backendError);
 
-      // Return a more specific error for OpenRouter failures
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Failed to connect to OpenRouter AI service",
-          details:
-            backendError instanceof Error
-              ? backendError.message
-              : "Unknown error",
-          requestId,
-          processingTime: Date.now() - startTime,
-          service: "openrouter",
-        },
-        { status: 503 }
-      );
+      // Fallback: Call OpenRouter directly if key is configured
+      const openrouterApiKey = process.env.OPENROUTER_API_KEY;
+      if (!openrouterApiKey) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Failed to connect to OpenRouter backend and no OPENROUTER_API_KEY is configured.",
+            details:
+              backendError instanceof Error
+                ? backendError.message
+                : "Unknown error",
+            requestId,
+            processingTime: Date.now() - startTime,
+            service: "openrouter",
+          },
+          { status: 503 }
+        );
+      }
+
+      try {
+        const referer =
+          process.env.NEXT_PUBLIC_SITE_URL ||
+          process.env.NEXT_PUBLIC_VERCEL_URL ||
+          "http://localhost:3000";
+
+        const directResponse = await fetch(
+          "https://openrouter.ai/api/v1/chat/completions",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${openrouterApiKey}`,
+              "HTTP-Referer": referer,
+              "X-Title": "CodeJoin",
+            },
+            body: JSON.stringify({
+              model: requestedModel,
+              messages: [{ role: "user", content: message }],
+              stream: false,
+              extra_body: { context: contextPayload },
+            }),
+          }
+        );
+
+        if (!directResponse.ok) {
+          const errText = await directResponse.text();
+          throw new Error(
+            `OpenRouter direct call returned ${directResponse.status}: ${errText}`
+          );
+        }
+
+        const data = await directResponse.json();
+        const choice = data?.choices?.[0];
+        const content = choice?.message?.content;
+        const modelUsed = data?.model || requestedModel;
+
+        if (!content || typeof content !== "string") {
+          throw new Error("OpenRouter returned an invalid response shape");
+        }
+
+        return NextResponse.json({
+          success: true,
+          response: content,
+          metadata: {
+            model: modelUsed,
+            provider: "OpenRouter",
+            tokensUsed:
+              data?.usage?.total_tokens ??
+              data?.usage?.completion_tokens ??
+              data?.usage?.prompt_tokens ??
+              0,
+            responseTime: Date.now() - startTime,
+            requestId,
+            backend: false,
+            openrouter: true,
+            direct: true,
+            ...(data?.usage && { tokenUsage: data.usage }),
+            ...(choice?.finish_reason && { finishReason: choice.finish_reason }),
+          },
+        });
+      } catch (directError) {
+        console.error("OpenRouter direct call failed:", directError);
+
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Failed to connect to OpenRouter AI service",
+            details:
+              directError instanceof Error
+                ? directError.message
+                : "Unknown error",
+            requestId,
+            processingTime: Date.now() - startTime,
+            service: "openrouter",
+          },
+          { status: 503 }
+        );
+      }
     }
   } catch (error) {
     console.error(`Error in OpenRouter AI chat POST: ${requestId}`, error);

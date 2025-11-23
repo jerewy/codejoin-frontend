@@ -24,6 +24,13 @@ interface SimpleConversation {
   updatedAt: string;
 }
 
+type SendOptions = {
+  model?: string;
+  temperature?: number;
+  maxTokens?: number;
+  systemContext?: string;
+};
+
 export function useSimpleChat(projectId?: string) {
   const { toast } = useToast();
 
@@ -117,7 +124,7 @@ export function useSimpleChat(projectId?: string) {
   }, [conversationId, saveConversation, toast]);
 
   // Send message
-  const sendMessage = useCallback(async (content: string) => {
+  const sendMessage = useCallback(async (content: string, options: SendOptions = {}) => {
     if (!content.trim()) return;
 
     // Create conversation if none exists
@@ -141,17 +148,32 @@ export function useSimpleChat(projectId?: string) {
 
     try {
       // Call the frontend API
+      const requestPayload: Record<string, unknown> = {
+        message: content,
+        context: 'AI Assistant Chat',
+        conversationId: conversationId,
+        projectId
+      };
+
+      if (options.model) {
+        requestPayload.model = options.model;
+      }
+      if (typeof options.temperature === 'number') {
+        requestPayload.temperature = options.temperature;
+      }
+      if (typeof options.maxTokens === 'number') {
+        requestPayload.max_tokens = options.maxTokens;
+      }
+      if (options.systemContext) {
+        requestPayload.context = options.systemContext;
+      }
+
       const response = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          message: content,
-          context: 'AI Assistant Chat',
-          conversationId: conversationId,
-          projectId
-        })
+        body: JSON.stringify(requestPayload)
       });
 
       const data = await response.json();
