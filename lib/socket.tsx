@@ -137,12 +137,13 @@ export const SocketProvider = ({ children }: SocketProviderProps) => {
     let socketInstance: Socket | null = null;
 
     const resolveSocketUrl = () => {
-      // Use the API_CONFIG helper for consistent URL resolution
+      // Always prefer explicit socket URL when provided
       const explicitUrl = API_CONFIG.SOCKET_URL?.trim();
-      if (explicitUrl && explicitUrl !== "http://localhost:3002") {
+      if (explicitUrl) {
         return explicitUrl;
       }
 
+      // Fallbacks
       if (isProduction()) {
         return API_CONFIG.SITE_URL || window.location.origin;
       }

@@ -37,25 +37,22 @@ class CodeExecutionAPI {
   private timeout: number;
 
   constructor(baseURL?: string, apiKey = "test123", timeout = 30000) {
-    let urlToUse = baseURL; // 1. Create a local variable
+    // Always prefer build-time env (Next replaces process.env.NEXT_PUBLIC_* on both server and client)
+    const envBaseUrl =
+      process.env.NEXT_PUBLIC_API_URL ||
+      process.env.BACKEND_URL ||
+      (typeof window !== "undefined"
+        ? (window as any).__ENV?.NEXT_PUBLIC_API_URL ||
+          (window as any).NEXT_PUBLIC_API_URL
+        : undefined);
 
-    // 2. Perform logic on the local variable
-    if (!urlToUse) {
-      if (typeof window !== "undefined") {
-        urlToUse =
-          (window as any).__ENV?.NEXT_PUBLIC_API_URL ||
-          (window as any).NEXT_PUBLIC_API_URL ||
-          "http://localhost:3001";
-      } else {
-        urlToUse =
-          process.env.NEXT_PUBLIC_API_URL ||
-          process.env.BACKEND_URL ||
-          "http://localhost:3001";
-      }
-    }
+    const defaultBaseUrl =
+      (process.env.NODE_ENV || "development") === "production"
+        ? "https://codejoin-backend.onrender.com"
+        : "http://localhost:3001";
 
-    // 3. Assign with a final fallback to guarantee 'string' type
-    this.baseURL = urlToUse || "http://localhost:3001";
+    // Fallback to provided arg, then env, then sensible defaults
+    this.baseURL = baseURL || envBaseUrl || defaultBaseUrl;
     this.apiKey = apiKey;
     this.timeout = timeout;
   }

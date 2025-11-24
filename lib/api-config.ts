@@ -3,12 +3,17 @@
 
 // Get environment variables with fallbacks
 const getEnvVar = (key: string, fallback: string) => {
+  // Prefer build-time injected env (Next replaces process.env.NEXT_PUBLIC_*)
+  const fromProcess = (globalThis as any).process?.env?.[key];
+  if (fromProcess) return fromProcess;
+
+  // Optional runtime injection (window.__ENV) if provided
   if (typeof window !== "undefined") {
-    // Client-side: access from window.__ENV or fallback
-    return (window as any).__ENV?.[key] || fallback;
+    const fromWindow = (window as any).__ENV?.[key];
+    if (fromWindow) return fromWindow;
   }
-  // Server-side: access from process.env
-  return (globalThis as any).process?.env?.[key] || fallback;
+
+  return fallback;
 };
 
 export const API_CONFIG = {
